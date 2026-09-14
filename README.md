@@ -1,8 +1,32 @@
+<!-- kododrive-readme-style -->
+
+<div align="center">
+  <img src="./assets/readme-header.svg" width="100%" alt="KodoStars" />
+</div>
+
+<br/>
+
+<div align="center">
+  <img src="./assets/readme-meta.svg" width="100%" alt="meta" />
+</div>
+
+<br/>
+
+<p align="center">
+  <a href="https://github.com/svod011929/KodoStars"><img src="https://img.shields.io/badge/GitHub-KodoStars-0D1117?style=for-the-badge&logo=github&logoColor=34D399" alt="repo" /></a>
+  <a href="https://t.me/KodoDrive"><img src="https://img.shields.io/badge/Telegram-@KodoDrive-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="tg" /></a>
+  <a href="https://github.com/svod011929"><img src="https://img.shields.io/badge/Author-svod011929-7C3AED?style=for-the-badge&logo=github&logoColor=white" alt="author" /></a>
+</p>
+
+<!-- /kododrive-readme-style -->
+
 # KodoStars
 
 Telegram-бот на **Python 3.12 / aiogram 3**: реферальная экономика на внутренних Stars, ежедневки, задания, бусты за **Telegram Stars (XTR)** и очередь выводов. Монетизация трафика — каскад обязательной подписки (ОП): **Flyer → SubGram → BotoHub → PiarFlow → TGrass → manual**.
 
 Интерфейс — русский. Выплаты пользователям — **только Telegram Stars**. CryptoBot нет.
+
+Автор: [KodoDrive](https://github.com/svod011929)
 
 ## Возможности
 
@@ -113,3 +137,45 @@ app/
   db/                  # models, session, seed
 tests/
 ```
+
+---
+
+<!-- kododrive-projects-block -->
+
+## Проекты KodoDrive
+
+Другие проекты автора: [профиль @svod011929](https://github.com/svod011929) · [Telegram](https://t.me/KodoDrive)
+
+### VPN и инфраструктура
+
+- [BuryatVPN — VPN-сервис + Telegram](https://github.com/svod011929/buryatvpn)
+- [VPN Server Installer — VLESS + TLS](https://github.com/svod011929/vpn-server-installer)
+- [3X-UI Auto Installer](https://github.com/svod011929/3x-ui-auto-installer)
+- [AWG Bot Installer — AmneziaWG](https://github.com/svod011929/awg-bot-installer)
+- [RemnaShop Installer](https://github.com/svod011929/remnashop-installer)
+- [VPN Auto Installer — панели](https://github.com/svod011929/vpn-auto-installer)
+- [VPNHubBot — Telegram VPN-бот](https://github.com/svod011929/VPNHubBot)
+
+### Telegram и автоматизация
+
+- [KDS Server Panel — SSH из Telegram](https://github.com/svod011929/KDS_Server_Panel)
+- [Telegram → VK Poster](https://github.com/svod011929/telegram-to-vk-poster)
+- [KDS Parser CryptoBot](https://github.com/svod011929/kds_parser_cryptobot)
+- [Auction Bot](https://github.com/svod011929/auction-bot)
+- [Invest Bot](https://github.com/svod011929/invest-bot)
+- [Crypto Check Bot](https://github.com/svod011929/crypto-check-bot)
+- [KodoRefStarsBot](https://github.com/svod011929/KodoRefStarsBot)
+- **KodoStars** ← ты здесь
+
+### Магазины и финансы
+
+- [KodoCashFlow](https://github.com/svod011929/KodoCashFlow)
+- [Telegram Crypto Shop](https://github.com/svod011929/telegram-crypto-shop)
+- [TalkProfit](https://github.com/svod011929/talkprofit)
+
+### Сайты
+
+- [KodoDrive Portfolio](https://github.com/svod011929/kododrive-portfolio)
+- [kododrive.github.io](https://github.com/svod011929/kododrive.github.io)
+
+<!-- /kododrive-projects-block -->
