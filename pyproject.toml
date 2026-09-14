@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kodostars"
+version = "0.1.0"
+description = "KodoStars — Telegram Stars referral bot with OP monetization"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "KodoStars" }]
+dependencies = [
+  "aiogram>=3.15,<4",
+  "SQLAlchemy[asyncio]>=2.0.36",
+  "aiosqlite>=0.20",
+  "pydantic-settings>=2.6",
+  "pydantic>=2.10",
+  "aiohttp>=3.11",
+  "structlog>=24.4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+  "pytest-asyncio>=0.24",
+]
+
+[project.scripts]
+kodostars = "app.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
