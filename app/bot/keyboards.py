@@ -109,6 +109,11 @@ def admin_home() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(text="Бан", callback_data="admin:ban"),
                 InlineKeyboardButton(text="Разбан", callback_data="admin:unban"),
             ],
+            [
+                InlineKeyboardButton(
+                    text="Импорт пользователей", callback_data="admin:import"
+                )
+            ],
             [InlineKeyboardButton(text="В меню", callback_data="menu:home")],
         ]
     )

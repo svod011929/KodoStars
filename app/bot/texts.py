@@ -115,8 +115,42 @@ def banned(reason: str) -> str:
 def admin_home() -> str:
     return (
         "<b>Админ-панель KodoStars</b>\n\n"
-        "Статистика, очередь выводов, тумблеры OP, рассылка и антифрод."
+        "Статистика, очередь выводов, тумблеры OP, рассылка, "
+        "импорт пользователей и антифрод."
     )
+
+
+def admin_import_prompt() -> str:
+    return (
+        "Пришлите CSV-файл следующим сообщением.\n"
+        "Формат: <code>id,username</code> (UTF-8, username без @)."
+    )
+
+
+def admin_import_need_csv() -> str:
+    return "Нужен документ с расширением .csv (заголовок id,username)."
+
+
+def admin_import_result(
+    created: int,
+    updated: int,
+    unchanged: int,
+    errors: int,
+    error_lines: list[str],
+) -> str:
+    lines = [
+        "<b>Импорт пользователей</b>",
+        "",
+        f"Создано: {created}",
+        f"Обновлено: {updated}",
+        f"Без изменений: {unchanged}",
+        f"Ошибок: {errors}",
+    ]
+    if error_lines:
+        lines.append("")
+        lines.append("Первые ошибки:")
+        lines.extend(error_lines[:10])
+    return "\n".join(lines)
 
 
 def admin_stats(data: dict[str, int]) -> str:
