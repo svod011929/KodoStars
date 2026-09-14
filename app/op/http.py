@@ -1,59 +1,42 @@
-from __future__ import annotations
-
 from typing import Any
 
-import httpx
+import aiohttp
 import structlog
 
-log = structlog.get_logger(__name__)
+log = structlog.get_logger("kodostars.op.http")
 
 
-class OpHttpError(Exception):
-    def __init__(self, provider: str, message: str, status_code: int | None = None) -> None:
-        super().__init__(message)
-        self.provider = provider
-        self.status_code = status_code
-
-
-async def op_request(
-    *,
-    method: str,
+async def post_json(
     url: str,
-    provider: str,
-    timeout: float = 12.0,
+    *,
+    json: dict[str, Any],
     headers: dict[str, str] | None = None,
-    json: dict[str, Any] | None = None,
-    data: dict[str, Any] | None = None,
-    params: dict[str, Any] | None = None,
-) -> dict[str, Any] | list[Any] | str:
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.request(
-                method,
-                url,
-                headers=headers,
-                json=json,
-                data=data,
-                params=params,
-            )
-    except httpx.HTTPError as exc:
-        log.warning("op_http_error", provider=provider, url=url, error=str(exc))
-        raise OpHttpError(provider, str(exc)) from exc
+    timeout: float = 8.0,
+) -> tuple[int, Any]:
+    timeout_cfg = aiohttp.ClientTimeout(total=timeout)
+    async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
+        async with session.post(url, json=json, headers=headers) as response:
+            try:
+                payload = await response.json(content_type=None)
+            except Exception:
+                payload = await response.text()
+            return response.status, payload
 
-    if response.status_code >= 400:
-        log.warning(
-            "op_http_status",
-            provider=provider,
-            url=url,
-            status=response.status_code,
-            body=response.text[:400],
-        )
-        raise OpHttpError(provider, response.text[:400], status_code=response.status_code)
 
-    content_type = response.headers.get("content-type", "")
-    if "application/json" in content_type:
-        payload = response.json()
-        if isinstance(payload, (dict, list)):
-            return payload
-        return {"value": payload}
-    return response.text
+def as_dict(payload: Any) -> dict[str, Any]:
+    return payload if isinstance(payload, dict) else {}
+
+
+def as_list(payload: Any) -> list[Any]:
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for key in ("sponsors", "tasks", "items", "result", "additional"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return value
+            if isinstance(value, dict) and "sponsors" in value:
+                inner = value.get("sponsors")
+                if isinstance(inner, list):
+                    return inner
+    return []
