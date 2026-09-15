@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from aiogram import F, Router
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -12,6 +14,7 @@ from app.op.gate import CASCADE, enabled_providers, toggle_provider
 from app.services import stats, users, withdrawals
 from app.services.antifraud import set_ban
 from app.services.errors import WithdrawalError
+from app.services.user_import import import_users_from_csv
 
 router = Router(name="admin")
 
@@ -21,6 +24,7 @@ class AdminFSM(StatesGroup):
     ban_id = State()
     ban_reason = State()
     unban_id = State()
+    import_users = State()
 
 
 def _is_admin(user_id: int, settings: Settings) -> bool:
@@ -35,10 +39,11 @@ async def cmd_admin(message: Message, settings: Settings) -> None:
 
 
 @router.callback_query(F.data == "admin:home")
-async def admin_home(call: CallbackQuery, settings: Settings) -> None:
+async def admin_home(call: CallbackQuery, settings: Settings, state: FSMContext) -> None:
     if not _is_admin(call.from_user.id, settings):
         await call.answer()
         return
+    await state.clear()
     await call.answer()
     if call.message:
         await call.message.edit_text(texts.admin_home(), reply_markup=keyboards.admin_home())
@@ -315,3 +320,59 @@ async def admin_unban(
         return
     await set_ban(session, user, banned=False, reason="", admin_id=message.from_user.id)
     await message.answer(f"Пользователь {user.id} разблокирован.")
+
+
+@router.callback_query(F.data == "admin:import")
+async def admin_import_start(
+    call: CallbackQuery, state: FSMContext, settings: Settings
+) -> None:
+    if not _is_admin(call.from_user.id, settings):
+        await call.answer()
+        return
+    await state.set_state(AdminFSM.import_users)
+    await call.answer()
+    if call.message:
+        await call.message.edit_text(
+            texts.admin_import_prompt(),
+            reply_markup=keyboards.admin_home(),
+        )
+
+
+@router.message(StateFilter(AdminFSM.import_users), F.document)
+async def admin_import_file(
+    message: Message,
+    session: AsyncSession,
+    state: FSMContext,
+    settings: Settings,
+) -> None:
+    if not _is_admin(message.from_user.id, settings):
+        return
+    document = message.document
+    if document is None:
+        await message.answer(texts.admin_import_need_csv())
+        return
+    filename = (document.file_name or "").lower()
+    if not filename.endswith(".csv"):
+        await message.answer(texts.admin_import_need_csv())
+        return
+    buffer = BytesIO()
+    await message.bot.download(document, destination=buffer)
+    result = await import_users_from_csv(session, buffer.getvalue())
+    await state.clear()
+    await message.answer(
+        texts.admin_import_result(
+            result.created,
+            result.updated,
+            result.unchanged,
+            result.errors,
+            result.error_lines,
+        ),
+        reply_markup=keyboards.admin_home(),
+    )
+
+
+@router.message(StateFilter(AdminFSM.import_users))
+async def admin_import_need_file(message: Message, settings: Settings) -> None:
+    if not _is_admin(message.from_user.id, settings):
+        return
+    await message.answer(texts.admin_import_need_csv())
