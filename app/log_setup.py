@@ -1,3 +1,5 @@
+# Must not be named logging.py: that filename shadows the stdlib logging
+# module when the app directory is on sys.path (RubyHost runs app/__main__.py).
 import logging
 import sys
 
