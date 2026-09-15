@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
+from app.bot.middlewares.events import unwrap_event
 from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext
@@ -61,13 +62,15 @@ class OpGateMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         markup = keyboards.op_keyboard(result.sponsors)
-        await _reply(event, texts.op_blocked(result.provider, result.message), markup)
-        if isinstance(event, CallbackQuery):
-            await event.answer()
+        inner = unwrap_event(event)
+        await _reply(inner, texts.op_blocked(result.provider, result.message), markup)
+        if isinstance(inner, CallbackQuery):
+            await inner.answer()
         return None
 
 
 def _should_skip(event: TelegramObject, settings: Settings) -> bool:
+    event = unwrap_event(event)
     if isinstance(event, Message):
         text = (event.text or "").split(maxsplit=1)[0]
         if text in _SKIP_COMMANDS:
@@ -91,6 +94,7 @@ def _op_fresh(user: User, cache_sec: int) -> bool:
 
 
 def _chat_id(event: TelegramObject, fallback: int) -> int:
+    event = unwrap_event(event)
     if isinstance(event, Message) and event.chat:
         return event.chat.id
     if isinstance(event, CallbackQuery) and event.message and event.message.chat:
@@ -99,6 +103,7 @@ def _chat_id(event: TelegramObject, fallback: int) -> int:
 
 
 async def _reply(event: TelegramObject, text: str, markup=None) -> None:
+    event = unwrap_event(event)
     if isinstance(event, Message):
         await event.answer(text, reply_markup=markup)
     elif isinstance(event, CallbackQuery) and event.message:

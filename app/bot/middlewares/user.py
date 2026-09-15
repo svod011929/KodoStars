@@ -5,6 +5,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, PreCheckoutQuery, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.middlewares.events import unwrap_event
 from app.config import Settings
 from app.services.users import upsert_user
 
@@ -38,6 +39,7 @@ class UserMiddleware(BaseMiddleware):
 
 
 def _extract_user(event: TelegramObject) -> Any | None:
-    if isinstance(event, (Message, CallbackQuery, PreCheckoutQuery)):
-        return event.from_user
-    return getattr(event, "from_user", None)
+    inner = unwrap_event(event)
+    if isinstance(inner, (Message, CallbackQuery, PreCheckoutQuery)):
+        return inner.from_user
+    return getattr(inner, "from_user", None)
