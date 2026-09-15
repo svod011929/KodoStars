@@ -9,7 +9,7 @@ from app.bot.factory import create_bot, create_dispatcher
 from app.config import get_settings
 from app.db.seed import seed_catalog
 from app.db.session import create_engine, create_session_factory, init_db
-from app.logging import setup_logging
+from app.log_setup import setup_logging
 from app.op.gate import OpGate
 
 
