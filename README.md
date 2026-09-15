@@ -62,6 +62,8 @@ cp .env.example .env
 python -m app
 ```
 
+На хостинг-панелях (RubyHost / Pterodactyl) укажите `APP PY FILE=main.py` в корне проекта. Не ставьте `app/__main__.py` — тогда падает `import app` (`ModuleNotFoundError`).
+
 Точка входа поднимает БД, сидирует каталог и стартует long polling. С плейсхолдер-токеном процесс тоже запускает polling — Telegram API ответит ошибкой авторизации, это ожидаемо.
 
 ## Переменные окружения
@@ -127,6 +129,7 @@ pytest
 ## Структура
 
 ```
+main.py                # RubyHost / Pterodactyl: APP PY FILE=main.py
 app/
   __main__.py          # python -m app
   config.py
