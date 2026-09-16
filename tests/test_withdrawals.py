@@ -18,8 +18,11 @@ async def _user(session, user_id: int = 50, credit: int = 80) -> User:
 @pytest.mark.asyncio
 async def test_apply_holds_funds_and_confirm_sent_keeps_them_debited(session, settings) -> None:
     user = await _user(session)
-    wd = await withdrawals.apply(session, user=user, amount=50, settings=settings)
+    wd = await withdrawals.apply(
+        session, user=user, amount=50, settings=settings, gift_id="g50", gift_emoji="🎁"
+    )
     assert wd.status == WithdrawalStatus.PENDING.value
+    assert wd.gift_id == "g50" and wd.gift_label == "🎁 · 50 ⭐"
     # Hold: balance drops immediately, ledger has a WITHDRAW_HOLD row.
     assert await ledger.get_balance(session, user.id) == 30
     assert await withdrawals.held_total(session, user.id) == 50

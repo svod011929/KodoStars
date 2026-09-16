@@ -302,6 +302,8 @@ class Withdrawal(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     amount: Mapped[int] = mapped_column(Integer)
+    gift_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    gift_emoji: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=WithdrawalStatus.PENDING.value)
     admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -310,6 +312,14 @@ class Withdrawal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="withdrawals")
+
+    @property
+    def gift_label(self) -> str:
+        if self.gift_emoji:
+            return f"{self.gift_emoji} · {self.amount} ⭐"
+        if self.gift_id:
+            return f"🎁 · {self.amount} ⭐"
+        return f"{self.amount} ⭐"
 
 
 class ProviderState(Base):

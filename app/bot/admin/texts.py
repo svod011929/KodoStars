@@ -156,7 +156,7 @@ def user_card(
     ]
     if open_wd is not None:
         lines.append(
-            f"⏳ Открытая заявка #{open_wd.id}: {open_wd.amount} {STAR} · "
+            f"⏳ Открытая заявка #{open_wd.id}: {h(open_wd.gift_label)} · "
             f"{WITHDRAWAL_STATUS_LABELS.get(open_wd.status, open_wd.status)}"
         )
     if user.is_banned and user.ban_reason:
@@ -331,9 +331,11 @@ def withdrawal_card(
         f"💸 <b>Заявка #{wd.id}</b> · {WITHDRAWAL_STATUS_LABELS.get(wd.status, wd.status)}",
         "",
         f"Пользователь: {name} (<code>{wd.user_id}</code>) {mention(wd.user_id, '↗')}",
-        f"Сумма: <b>{wd.amount} {STAR}</b>",
+        f"Сумма: <b>{h(wd.gift_label)}</b>",
         f"Создана: {fmt_dt(wd.created_at)} ({fmt_ago(wd.created_at)})",
     ]
+    if wd.gift_id:
+        lines.append(f"Подарок: <code>{h(wd.gift_id)}</code>")
     if user is not None:
         lines += [
             "",
@@ -359,11 +361,18 @@ def withdrawal_card(
     if wd.admin_note:
         lines += ["", f"📝 {h(wd.admin_note)}"]
     if wd.status == "approved_manual":
-        lines += [
-            "",
-            "➡️ Отправьте пользователю Stars вручную (подарок Stars из личного аккаунта), "
-            "затем нажмите «Подтвердить отправку».",
-        ]
+        if wd.gift_id:
+            lines += [
+                "",
+                "➡️ Нажмите «Отправить подарок» — бот спишет Stars со своего баланса "
+                "и отправит подарок пользователю. Или отметьте, что уже отправили вручную.",
+            ]
+        else:
+            lines += [
+                "",
+                "➡️ Отправьте пользователю Stars вручную (подарок Stars из личного аккаунта), "
+                "затем нажмите «Подтвердить отправку».",
+            ]
     return "\n".join(lines)
 
 
@@ -371,7 +380,7 @@ def withdrawal_alert(wd: Withdrawal, user: User, balance: int, refs: dict[int, i
     return (
         f"🔔 <b>Новая заявка на вывод #{wd.id}</b>\n\n"
         f"{h(user.display_name)} (<code>{user.id}</code>) {mention(user.id, '↗')}\n"
-        f"Сумма: <b>{wd.amount} {STAR}</b> · остаток {balance} {STAR}\n"
+        f"Подарок: <b>{h(wd.gift_label)}</b> · остаток {balance} {STAR}\n"
         f"Уровень {user.level} · активность {user.activity_score} · "
         f"рефералы {refs.get(1, 0)} (акт. {activated})\n"
         f"Регистрация {fmt_dt(user.created_at, with_time=False)}"
@@ -379,12 +388,12 @@ def withdrawal_alert(wd: Withdrawal, user: User, balance: int, refs: dict[int, i
 
 
 def withdrawal_cancelled_alert(wd: Withdrawal, name: str) -> str:
-    return f"↩️ Заявка #{wd.id} на {wd.amount} {STAR} отменена пользователем {h(name)}."
+    return f"↩️ Заявка #{wd.id} на {h(wd.gift_label)} отменена пользователем {h(name)}."
 
 
 def reject_reason_prompt(wd: Withdrawal) -> str:
     return (
-        f"Причина отклонения заявки #{wd.id} ({wd.amount} {STAR}). "
+        f"Причина отклонения заявки #{wd.id} ({h(wd.gift_label)}). "
         "Пользователь увидит её в уведомлении. Отправьте текст."
     )
 

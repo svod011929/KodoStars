@@ -11,6 +11,7 @@ from app.bot.utils import PAGE_SIZE, button, markup, pager, url_button
 from app.db.models import BoostProduct, Task, TaskKind, Withdrawal, WithdrawalStatus
 from app.op.base import Sponsor
 from app.op.manual import parse_channel_entry
+from app.services.gifts import GiftOffer
 from app.services.tasks import task_target
 
 
@@ -136,30 +137,41 @@ def top_menu(mode: str) -> InlineKeyboardMarkup:
 
 
 def withdraw_keyboard(
-    balance: int,
-    minimum: int,
-    maximum: int,
+    offers: Sequence[GiftOffer],
     *,
     enabled: bool,
     has_open: bool,
+    page: int = 0,
+    per_page: int = 8,
     device_url: str | None = None,
+    catalog_error: bool = False,
 ) -> InlineKeyboardMarkup:
     rows = []
     if device_url:
         rows.append([device_button(device_url)])
         enabled = False  # verification comes first
-    if enabled and not has_open and balance >= minimum:
-        cap = min(balance, maximum) if maximum else balance
-        presets = [value for value in (minimum, 100, 250, 500) if minimum <= value <= cap]
-        chunk = []
-        for value in dict.fromkeys(presets):
-            chunk.append(button(f"{value} ⭐", f"wd:amt:{value}"))
-            if len(chunk) == 3:
+    if enabled and not has_open and not catalog_error and offers:
+        total = len(offers)
+        start = page * per_page
+        page_items = offers[start : start + per_page]
+        chunk: list[InlineKeyboardButton] = []
+        for offer in page_items:
+            chunk.append(button(f"{offer.emoji} {offer.star_count} ⭐", f"wd:g:{offer.id}"))
+            if len(chunk) == 2:
                 rows.append(chunk)
                 chunk = []
         if chunk:
             rows.append(chunk)
-        rows.append([button(f"Всё ({cap} ⭐)", f"wd:amt:{cap}"), button("✏️ Своя сумма", "wd:custom")])
+        if total > per_page:
+            nav: list[InlineKeyboardButton] = []
+            if page > 0:
+                nav.append(button("◀️", f"wd:page:{page - 1}"))
+            nav.append(button(f"{page + 1}/{(total + per_page - 1) // per_page}", "noop"))
+            if start + per_page < total:
+                nav.append(button("▶️", f"wd:page:{page + 1}"))
+            rows.append(nav)
+    if catalog_error:
+        rows.append([button("🔄 Обновить каталог", "menu:withdraw")])
     rows.append([button("📄 Мои заявки", "wd:list"), button("🏠 В меню", "menu:home")])
     return markup(*rows)
 

@@ -93,7 +93,7 @@ async def test_csv_exports(session, settings) -> None:
     assert rows[0][:3] == ["id", "username", "first_name"]
     assert len(rows) == 8
     wd_rows = list(csv.reader(StringIO((await export.withdrawals_csv(session)).decode("utf-8-sig"))))
-    assert wd_rows[1][3] == "sent"
+    assert wd_rows[1][5] == "sent"
     ledger_rows = list(
         csv.reader(StringIO((await export.ledger_csv(session, user_id=703)).decode("utf-8-sig")))
     )

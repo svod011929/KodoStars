@@ -10,6 +10,7 @@ from aiogram.methods import (
     CreateChatSubscriptionInviteLink,
     EditMessageText,
     SendDocument,
+    SendGift,
     SendInvoice,
     SendMessage,
 )
@@ -146,8 +147,8 @@ async def test_concurrent_double_withdraw_creates_one_request(harness: BotHarnes
         await ledger.credit(session, user_id=USER_ID, amount=200, kind=LedgerKind.TASK)
         await session.commit()
     await asyncio.gather(
-        h.feed(callback_update(USER_ID, "wd:amt:50", message_id=20)),
-        h.feed(callback_update(USER_ID, "wd:amt:50", message_id=21)),
+        h.feed(callback_update(USER_ID, "wd:g:g50", message_id=20)),
+        h.feed(callback_update(USER_ID, "wd:g:g50", message_id=21)),
     )
     async with h.factory() as session:
         requests = (
@@ -181,7 +182,7 @@ async def test_device_check_button_and_gating_in_ui(harness: BotHarness) -> None
     withdraw_markup = [m for m in h.tg.sent(EditMessageText) if m.chat_id == USER_ID][-1].reply_markup
     assert withdraw_markup.inline_keyboard[0][0].web_app is not None
     assert not any(
-        b.callback_data and b.callback_data.startswith("wd:amt")
+        b.callback_data and b.callback_data.startswith("wd:g:")
         for row in withdraw_markup.inline_keyboard
         for b in row
     )
@@ -235,7 +236,7 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness) -> Non
     h = harness
     await _start(h, ADMIN_ID)
     await _start(h, USER_ID)
-    await h.feed(callback_update(USER_ID, "wd:amt:50"))
+    await h.feed(callback_update(USER_ID, "wd:g:g50"))
     assert "Недостаточно" in h.tg.last_text(USER_ID)
 
     async with h.factory() as session:
@@ -244,26 +245,32 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness) -> Non
     h.tg.clear()
     await h.feed(callback_update(USER_ID, "menu:withdraw"))
     assert "Доступно: <b>105" in h.tg.last_text(USER_ID)
-    await h.feed(callback_update(USER_ID, "wd:amt:50"))
+    assert "Выберите готовый подарок" in h.tg.last_text(USER_ID)
+    withdraw_markup = [m for m in h.tg.sent(EditMessageText) if m.chat_id == USER_ID][-1].reply_markup
+    assert any(b.callback_data == "wd:g:g50" for row in withdraw_markup.inline_keyboard for b in row)
+    await h.feed(callback_update(USER_ID, "wd:g:g50"))
     assert "Заявка #1" in h.tg.last_text(USER_ID)
     assert await _balance(h, USER_ID) == 55
     admin_alert = h.tg.last_text(ADMIN_ID)
     assert "Новая заявка на вывод #1" in admin_alert
+    assert "🎁" in admin_alert
     alert_markup = [r for r in h.tg.sent(SendMessage) if r.chat_id == ADMIN_ID][-1].reply_markup
     assert alert_markup.inline_keyboard[0][0].callback_data == "admin:wd:ok:1"
 
-    # Admin approves, then confirms sending. User is notified on each step.
+    # Admin approves, then sends the gift via bot API. User is notified on each step.
     await h.feed(callback_update(ADMIN_ID, "admin:wd:ok:1"))
     assert "согласована" in h.tg.last_text(USER_ID)
-    await h.feed(callback_update(ADMIN_ID, "admin:wd:sent:1"))
-    assert "отправлены" in h.tg.last_text(USER_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:wd:gift:1"))
+    assert "отправлен" in h.tg.last_text(USER_ID)
+    assert h.tg.sent(SendGift)
     async with h.factory() as session:
         wd = await session.get(Withdrawal, 1)
         assert wd.status == WithdrawalStatus.SENT.value
+        assert wd.gift_id == "g50"
     assert await _balance(h, USER_ID) == 55
 
     # A second request can be cancelled by the user and Stars come back.
-    await h.feed(callback_update(USER_ID, "wd:amt:50"))
+    await h.feed(callback_update(USER_ID, "wd:g:g50"))
     assert await _balance(h, USER_ID) == 5
     await h.feed(callback_update(USER_ID, "wd:list"))
     await h.feed(callback_update(USER_ID, "wd:cancel:2"))
@@ -272,20 +279,16 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness) -> Non
 
 
 @pytest.mark.asyncio
-async def test_withdraw_custom_amount_and_reject_with_reason(harness: BotHarness) -> None:
+async def test_withdraw_gift_reject_with_reason(harness: BotHarness) -> None:
     h = harness
     await _start(h, ADMIN_ID)
     await _start(h, USER_ID)
     async with h.factory() as session:
         await ledger.credit(session, user_id=USER_ID, amount=200, kind=LedgerKind.TASK)
         await session.commit()
-    await h.feed(callback_update(USER_ID, "wd:custom"))
-    assert "Введите сумму" in h.tg.last_text(USER_ID)
-    await h.feed(message_update(USER_ID, "abc"))
-    assert "числом" in h.tg.last_text(USER_ID)
-    await h.feed(message_update(USER_ID, "120"))
+    await h.feed(callback_update(USER_ID, "wd:g:g100"))
     assert "Заявка #1" in h.tg.last_text(USER_ID)
-    assert await _balance(h, USER_ID) == 85
+    assert await _balance(h, USER_ID) == 105
 
     await h.feed(callback_update(ADMIN_ID, "admin:wd:no:1"))
     assert "Причина отклонения" in h.tg.last_text(ADMIN_ID)

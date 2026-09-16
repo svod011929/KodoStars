@@ -298,7 +298,16 @@ def top(
     return "\n".join(lines)
 
 
-def withdraw_home(balance: int, held: int, settings: Settings, open_request: Withdrawal | None) -> str:
+def withdraw_home(
+    balance: int,
+    held: int,
+    settings: Settings,
+    open_request: Withdrawal | None,
+    *,
+    offers_count: int = 0,
+    catalog_error: bool = False,
+    can_pick: bool = True,
+) -> str:
     lines = [
         "💸 <b>Вывод Stars</b>",
         "",
@@ -317,26 +326,28 @@ def withdraw_home(balance: int, held: int, settings: Settings, open_request: Wit
     if open_request is not None:
         lines += [
             "",
-            f"Открытая заявка #{open_request.id}: <b>{open_request.amount} {STAR}</b> — "
+            f"Открытая заявка #{open_request.id}: <b>{h(open_request.gift_label)}</b> — "
             f"{WITHDRAWAL_STATUS_LABELS.get(open_request.status, open_request.status)}.",
         ]
-    lines += [
-        "",
-        "Сумма резервируется сразу при создании заявки. Администратор проверяет её и "
-        "отправляет Stars вручную (подарком Stars) — обычно в течение суток. "
-        "Если заявку отклонят, Stars вернутся на баланс.",
-    ]
+    elif can_pick and catalog_error:
+        lines += ["", "⚠️ Не удалось загрузить каталог подарков Telegram. Попробуйте обновить."]
+    elif can_pick and balance < settings.withdraw_min:
+        lines += ["", f"Накопите ещё {settings.withdraw_min - balance} {STAR}, чтобы выбрать подарок."]
+    elif can_pick and offers_count == 0:
+        lines += ["", "Сейчас нет доступных подарков на ваш баланс. Накопите больше Stars."]
+    elif can_pick:
+        lines += [
+            "",
+            "Выберите готовый подарок Telegram — его стоимость спишется с баланса. "
+            "Администратор проверит заявку и отправит подарок (обычно в течение суток). "
+            "Если заявку отклонят, Stars вернутся на баланс.",
+        ]
     return "\n".join(lines)
-
-
-def withdraw_custom_prompt(balance: int, settings: Settings) -> str:
-    maximum = min(balance, settings.withdraw_max) if settings.withdraw_max else balance
-    return f"Введите сумму от {settings.withdraw_min} до {maximum} {STAR} числом.\nИли нажмите «Отмена»."
 
 
 def withdraw_created(wd: Withdrawal) -> str:
     return (
-        f"✅ Заявка #{wd.id} на <b>{wd.amount} {STAR}</b> создана.\n"
+        f"✅ Заявка #{wd.id} на <b>{h(wd.gift_label)}</b> создана.\n"
         "Сумма зарезервирована. Мы уведомим вас, когда администратор её обработает."
     )
 
@@ -347,7 +358,7 @@ def withdraw_list(items: Sequence[Withdrawal]) -> str:
     lines = ["📄 <b>Мои заявки</b>", ""]
     for wd in items:
         status = WITHDRAWAL_STATUS_LABELS.get(wd.status, wd.status)
-        lines.append(f"#{wd.id} · {wd.amount} {STAR} · {status} · {fmt_dt(wd.created_at)}")
+        lines.append(f"#{wd.id} · {h(wd.gift_label)} · {status} · {fmt_dt(wd.created_at)}")
         if wd.status == "rejected" and wd.admin_note:
             lines.append(f"   <i>{h(wd.admin_note)}</i>")
     return "\n".join(lines)
@@ -356,14 +367,17 @@ def withdraw_list(items: Sequence[Withdrawal]) -> str:
 def withdraw_status_update(wd: Withdrawal, status: str, note: str) -> str:
     if status == "approved_manual":
         return (
-            f"🟢 Заявка #{wd.id} на {wd.amount} {STAR} согласована.\n"
-            "Администратор отправит Stars вручную — обычно это подарок Stars в Telegram."
+            f"🟢 Заявка #{wd.id} на {h(wd.gift_label)} согласована.\n"
+            "Администратор скоро отправит подарок Stars."
         )
     if status == "sent":
-        return f"💸 Заявка #{wd.id}: <b>{wd.amount} {STAR}</b> отправлены. Спасибо, что с нами!"
+        return f"💸 Заявка #{wd.id}: подарок <b>{h(wd.gift_label)}</b> отправлен. Спасибо, что с нами!"
     if status == "rejected":
         reason = f"\nПричина: {h(note)}" if note else ""
-        return f"🔴 Заявка #{wd.id} на {wd.amount} {STAR} отклонена. Stars возвращены на баланс.{reason}"
+        return (
+            f"🔴 Заявка #{wd.id} на {h(wd.gift_label)} отклонена. "
+            f"Stars возвращены на баланс.{reason}"
+        )
     return f"Заявка #{wd.id}: статус — {WITHDRAWAL_STATUS_LABELS.get(status, status)}."
 
 
@@ -406,7 +420,7 @@ def help_text(settings: Settings, is_admin: bool) -> str:
         f"{settings.referral_l1_percent}% с его заработка (плюс 2-й уровень).\n"
         "• <b>Уровни</b> — XP за любые действия, множитель до ×2.\n"
         "• <b>Бусты</b> — множители и паки за Telegram Stars (XTR).\n"
-        f"• <b>Вывод</b> — от {settings.withdraw_min} {STAR}, выплата подарком Stars вручную.\n\n"
+        f"• <b>Вывод</b> — от {settings.withdraw_min} {STAR}, выбор готового подарка Telegram.\n\n"
         "Команды: /menu — меню, /profile — профиль, /help — эта справка, "
         "/paysupport — вопросы по оплате."
         f"{support}{admin}"

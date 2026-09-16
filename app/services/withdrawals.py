@@ -85,6 +85,8 @@ async def apply(
     user: User,
     amount: int,
     settings: Settings,
+    gift_id: str | None = None,
+    gift_emoji: str | None = None,
 ) -> Withdrawal:
     ensure_not_banned(user)
     if not settings.withdraw_enabled:
@@ -128,6 +130,8 @@ async def apply(
     withdrawal = Withdrawal(
         user_id=user.id,
         amount=amount,
+        gift_id=gift_id,
+        gift_emoji=gift_emoji,
         status=WithdrawalStatus.PENDING.value,
     )
     session.add(withdrawal)
@@ -145,7 +149,10 @@ async def apply(
         await session.flush()
         raise WithdrawalError("Недостаточно Stars на балансе") from exc
     user.last_withdraw_at = datetime.now(UTC)
-    await record_event(session, user.id, "withdraw_apply", f"amount={amount}")
+    detail = f"amount={amount}"
+    if gift_id:
+        detail += f" gift={gift_id}"
+    await record_event(session, user.id, "withdraw_apply", detail)
     await session.flush()
     events.emit(session, "withdrawal_created", withdrawal_id=withdrawal.id, user_id=user.id)
     return withdrawal

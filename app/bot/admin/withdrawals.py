@@ -1,4 +1,5 @@
 from aiogram import F, Router
+from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
@@ -166,7 +167,49 @@ async def wd_sent(call: CallbackQuery, session: AsyncSession) -> None:
         target_type="withdrawal",
         target_id=wd.id,
         amount=wd.amount,
+        gift_id=wd.gift_id,
     )
     text, markup = await render_card(session, wd)
     await safe_answer(call, "Выплата подтверждена")
+    await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data.regexp(r"^admin:wd:gift:(\d+)$"))
+async def wd_send_gift(call: CallbackQuery, session: AsyncSession) -> None:
+    wd = await session.get(Withdrawal, parse_id(call.data))
+    if wd is None:
+        await safe_answer(call, "Заявка не найдена", alert=True)
+        return
+    if not wd.gift_id:
+        await safe_answer(call, "В заявке нет подарка", alert=True)
+        return
+    if wd.status != WithdrawalStatus.APPROVED_MANUAL.value:
+        await safe_answer(call, "Сначала согласуйте заявку", alert=True)
+        return
+    try:
+        await call.bot.send_gift(gift_id=wd.gift_id, user_id=wd.user_id)
+    except TelegramAPIError as exc:
+        await safe_answer(call, f"Не удалось отправить подарок: {exc}", alert=True)
+        return
+    try:
+        await withdrawals.confirm_sent(session, withdrawal=wd, admin_id=call.from_user.id)
+    except WithdrawalError as exc:
+        await safe_answer(
+            call,
+            f"Подарок отправлен, но статус не обновлён: {exc.message}. Отметьте вручную.",
+            alert=True,
+        )
+        return
+    await audit.log_action(
+        session,
+        admin_id=call.from_user.id,
+        action="withdrawal.sent",
+        target_type="withdrawal",
+        target_id=wd.id,
+        amount=wd.amount,
+        gift_id=wd.gift_id,
+        via="bot",
+    )
+    text, markup = await render_card(session, wd)
+    await safe_answer(call, "Подарок отправлен")
     await safe_edit(call.message, text, markup)

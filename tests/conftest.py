@@ -19,6 +19,7 @@ from app.op.gate import OpGate
 from app.services.access import AccessRegistry
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.broadcasts import BroadcastRunner
+from app.services import gifts as gifts_service
 from tests.fake_telegram import BOT_USERNAME, FakeSession, make_bot
 
 ADMIN_ID = 1
@@ -86,6 +87,8 @@ class BotHarness:
         self.tg.clear()
         self.tg.member_status.clear()
         self.tg.fail_refunds = False
+        self.tg.fail_send_gift = False
+        gifts_service.invalidate_cache()
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")

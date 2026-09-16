@@ -13,7 +13,7 @@ from typing import Any
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode, StickerType
 from aiogram.methods import (
     AnswerCallbackQuery,
     AnswerPreCheckoutQuery,
@@ -21,11 +21,13 @@ from aiogram.methods import (
     CreateChatInviteLink,
     CreateChatSubscriptionInviteLink,
     EditMessageText,
+    GetAvailableGifts,
     GetChatMember,
     GetMe,
     GetMyStarBalance,
     RefundStarPayment,
     SendDocument,
+    SendGift,
     SendInvoice,
     SendMessage,
     TelegramMethod,
@@ -37,11 +39,14 @@ from aiogram.types import (
     ChatMemberAdministrator,
     ChatMemberLeft,
     ChatMemberMember,
+    Gift,
+    Gifts,
     Message,
     MessageId,
     MessageOriginChannel,
     PreCheckoutQuery,
     StarAmount,
+    Sticker,
     SuccessfulPayment,
     Update,
 )
@@ -53,6 +58,52 @@ BOT_TOKEN = "123456789:TEST-TOKEN-FOR-TESTS"
 BOT_ID = 123456789
 BOT_USERNAME = "kodostars_test_bot"
 
+# Fixed catalog so e2e withdraw tests do not depend on live Telegram.
+TEST_GIFTS: list[Gift] = [
+    Gift(
+        id="g50",
+        sticker=Sticker(
+            file_id="f50",
+            file_unique_id="u50",
+            type=StickerType.REGULAR,
+            width=100,
+            height=100,
+            is_animated=False,
+            is_video=False,
+            emoji="🎁",
+        ),
+        star_count=50,
+    ),
+    Gift(
+        id="g100",
+        sticker=Sticker(
+            file_id="f100",
+            file_unique_id="u100",
+            type=StickerType.REGULAR,
+            width=100,
+            height=100,
+            is_animated=False,
+            is_video=False,
+            emoji="🌹",
+        ),
+        star_count=100,
+    ),
+    Gift(
+        id="g250",
+        sticker=Sticker(
+            file_id="f250",
+            file_unique_id="u250",
+            type=StickerType.REGULAR,
+            width=100,
+            height=100,
+            is_animated=False,
+            is_video=False,
+            emoji="🏆",
+        ),
+        star_count=250,
+    ),
+]
+
 
 class FakeSession(BaseSession):
     def __init__(self) -> None:
@@ -60,6 +111,7 @@ class FakeSession(BaseSession):
         self.requests: list[TelegramMethod[Any]] = []
         self.member_status: dict[tuple[str, int], str] = {}
         self.fail_refunds = False
+        self.fail_send_gift = False
         self._message_id = 1000
 
     async def close(self) -> None:
@@ -151,6 +203,14 @@ class FakeSession(BaseSession):
                 name=method.name,
                 subscription_price=price,
             )
+        if isinstance(method, GetAvailableGifts):
+            return Gifts(gifts=list(TEST_GIFTS))
+        if isinstance(method, SendGift):
+            if self.fail_send_gift:
+                from aiogram.exceptions import TelegramBadRequest
+
+                raise TelegramBadRequest(method=method, message="BALANCE_TOO_LOW")
+            return True
         if isinstance(method, RefundStarPayment):
             return not self.fail_refunds
         if isinstance(method, AnswerPreCheckoutQuery):

@@ -167,7 +167,9 @@ def withdrawals_list(
     rows = [
         [
             button(
-                f"{icons.get(w.status, '')} #{w.id} · {w.amount}⭐ · {names.get(w.user_id, w.user_id)}"[:60],
+                f"{icons.get(w.status, '')} #{w.id} · {w.gift_label} · {names.get(w.user_id, w.user_id)}"[
+                    :60
+                ],
                 f"admin:wd:view:{w.id}",
             )
         ]
@@ -178,14 +180,18 @@ def withdrawals_list(
     return markup(*rows)
 
 
-def withdrawal_actions(wd_id: int, status: str) -> InlineKeyboardMarkup:
+def withdrawal_actions(wd_id: int, status: str, *, has_gift: bool = False) -> InlineKeyboardMarkup:
     rows = []
     if status == WithdrawalStatus.PENDING.value:
         rows.append(
             [button("✅ Согласовать", f"admin:wd:ok:{wd_id}"), button("🔴 Отклонить", f"admin:wd:no:{wd_id}")]
         )
     elif status == WithdrawalStatus.APPROVED_MANUAL.value:
-        rows.append([button("💸 Подтвердить отправку", f"admin:wd:sent:{wd_id}")])
+        if has_gift:
+            rows.append([button("🎁 Отправить подарок", f"admin:wd:gift:{wd_id}")])
+            rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd_id}")])
+        else:
+            rows.append([button("💸 Подтвердить отправку", f"admin:wd:sent:{wd_id}")])
         rows.append([button("🔴 Отклонить", f"admin:wd:no:{wd_id}")])
     rows.append([button("🔎 Открыть заявку", f"admin:wd:view:{wd_id}")])
     return markup(*rows)
@@ -198,7 +204,11 @@ def withdrawal_card(wd: Withdrawal) -> InlineKeyboardMarkup:
             [button("✅ Согласовать", f"admin:wd:ok:{wd.id}"), button("🔴 Отклонить", f"admin:wd:no:{wd.id}")]
         )
     elif wd.status == WithdrawalStatus.APPROVED_MANUAL.value:
-        rows.append([button("💸 Подтвердить отправку", f"admin:wd:sent:{wd.id}")])
+        if wd.gift_id:
+            rows.append([button("🎁 Отправить подарок", f"admin:wd:gift:{wd.id}")])
+            rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd.id}")])
+        else:
+            rows.append([button("💸 Подтвердить отправку", f"admin:wd:sent:{wd.id}")])
         rows.append([button("🔴 Отклонить (вернуть Stars)", f"admin:wd:no:{wd.id}")])
     rows.append(
         [button("👤 Пользователь", f"admin:u:{wd.user_id}"), button("🔄 Обновить", f"admin:wd:view:{wd.id}")]

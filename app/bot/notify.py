@@ -125,7 +125,11 @@ class Notifier:
             text = admin_texts.withdrawal_alert(wd, user, balance, refs, activated)
         for admin_id in self._access.all_admin_ids():
             await self._send(
-                admin_id, text, reply_markup=admin_keyboards.withdrawal_actions(wd.id, wd.status)
+                admin_id,
+                text,
+                reply_markup=admin_keyboards.withdrawal_actions(
+                    wd.id, wd.status, has_gift=bool(wd.gift_id)
+                ),
             )
 
     async def _withdrawal_status(self, payload: dict[str, Any]) -> None:

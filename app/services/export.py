@@ -74,6 +74,8 @@ async def withdrawals_csv(session: AsyncSession) -> bytes:
             w.id,
             w.user_id,
             w.amount,
+            w.gift_id or "",
+            w.gift_emoji or "",
             w.status,
             w.reviewed_by or "",
             _iso(w.created_at),
@@ -84,7 +86,19 @@ async def withdrawals_csv(session: AsyncSession) -> bytes:
         for w in result.scalars()
     )
     return _to_csv(
-        ["id", "user_id", "amount", "status", "reviewed_by", "created_at", "reviewed_at", "sent_at", "note"],
+        [
+            "id",
+            "user_id",
+            "amount",
+            "gift_id",
+            "gift_emoji",
+            "status",
+            "reviewed_by",
+            "created_at",
+            "reviewed_at",
+            "sent_at",
+            "note",
+        ],
         rows,
     )
 
