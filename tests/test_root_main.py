@@ -12,8 +12,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,7 +39,7 @@ def _import_script_as_panel(script: Path) -> subprocess.CompletedProcess[str]:
     )
     return subprocess.run(
         [sys.executable, "-c", loader, str(script)],
-        cwd="/tmp",
+        cwd=tempfile.gettempdir(),
         env=_panel_env(),
         capture_output=True,
         text=True,

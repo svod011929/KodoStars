@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import ProviderState
+from app.db.txn import commit_before_io
 from app.op.base import OpAdapter, OpContext, OpResult
 from app.op.botohub import BotoHubAdapter
 from app.op.flyer import FlyerAdapter
@@ -13,6 +14,7 @@ from app.op.manual import ManualAdapter
 from app.op.piarflow import PiarFlowAdapter
 from app.op.subgram import SubGramAdapter
 from app.op.tgrass import TGrassAdapter
+from app.op.trafsly import TrafslyAdapter
 
 log = structlog.get_logger("kodostars.op")
 
@@ -22,8 +24,28 @@ CASCADE: tuple[str, ...] = (
     "botohub",
     "piarflow",
     "tgrass",
+    "trafsly",
     "manual",
 )
+
+PROVIDER_TITLES: dict[str, str] = {
+    "flyer": "Flyer",
+    "subgram": "SubGram",
+    "botohub": "BotoHub",
+    "piarflow": "PiarFlow",
+    "tgrass": "TGrass",
+    "trafsly": "Trafsly",
+    "manual": "Свои каналы",
+}
+
+PROVIDER_DOCS: dict[str, str] = {
+    "flyer": "https://api.flyerhubs.com/",
+    "subgram": "https://subgram.ru",
+    "botohub": "https://botohub.me/integration",
+    "piarflow": "https://piarflow.com/api-docs",
+    "tgrass": "https://tgrass.space/integration",
+    "trafsly": "https://trafsly.com/api-docs",
+}
 
 
 class OpGate:
@@ -38,11 +60,16 @@ class OpGate:
         session: AsyncSession,
         *,
         verify: bool = False,
+        settings: Settings | None = None,
     ) -> OpResult:
-        enabled = await enabled_providers(session, self._settings)
+        effective = settings or self._settings
+        ctx.settings = effective
+        enabled = await enabled_providers(session, effective)
+        # Provider checks are network round trips (up to OP_TIMEOUT_SEC each): release
+        # the SQLite write lock before making them.
+        await commit_before_io()
         for name in CASCADE:
             if name not in enabled:
-                log.info("op_provider_disabled", provider=name)
                 continue
             adapter = self._by_name.get(name)
             if adapter is None:
@@ -70,8 +97,28 @@ def default_adapters(settings: Settings) -> list[OpAdapter]:
         BotoHubAdapter(settings),
         PiarFlowAdapter(settings),
         TGrassAdapter(settings),
+        TrafslyAdapter(settings),
         ManualAdapter(settings),
     ]
+
+
+def provider_configured(name: str, settings: Settings) -> bool:
+    """Whether the provider has credentials/channels and would do real work."""
+    if name == "flyer":
+        return bool(settings.flyer_api_key.strip())
+    if name == "subgram":
+        return bool(settings.subgram_api_key.strip())
+    if name == "botohub":
+        return bool(settings.botohub_api_key.strip())
+    if name == "piarflow":
+        return bool(settings.piarflow_api_key.strip())
+    if name == "tgrass":
+        return bool(settings.tgrass_api_key.strip() or settings.tgrass_channels.strip())
+    if name == "trafsly":
+        return bool(settings.trafsly_api_key.strip())
+    if name == "manual":
+        return bool(settings.parse_channel_list(settings.manual_op_channels))
+    return False
 
 
 async def enabled_providers(session: AsyncSession, settings: Settings) -> set[str]:
@@ -81,6 +128,7 @@ async def enabled_providers(session: AsyncSession, settings: Settings) -> set[st
         "botohub": settings.botohub_enabled,
         "piarflow": settings.piarflow_enabled,
         "tgrass": settings.tgrass_enabled,
+        "trafsly": settings.trafsly_enabled,
         "manual": settings.manual_enabled,
     }
     result = await session.execute(select(ProviderState))

@@ -1,4 +1,6 @@
 class EconomyError(Exception):
+    """Base class for user-facing domain errors (``message`` is safe to show)."""
+
     def __init__(self, message: str) -> None:
         super().__init__(message)
         self.message = message
@@ -21,4 +23,20 @@ class UserBanned(EconomyError):
 
 
 class WithdrawalError(EconomyError):
+    pass
+
+
+class PromoError(EconomyError):
+    pass
+
+
+class NotFound(EconomyError):
+    pass
+
+
+class ValidationError(EconomyError):
+    pass
+
+
+class AccessDenied(EconomyError):
     pass

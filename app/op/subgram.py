@@ -1,5 +1,5 @@
 from app.config import Settings
-from app.op.base import OpContext, OpResult, Sponsor
+from app.op.base import BoundedCache, OpContext, OpResult, Sponsor
 from app.op.http import as_dict, as_list, post_json
 
 
@@ -10,7 +10,7 @@ class SubGramAdapter:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._links: dict[int, list[str]] = {}
+        self._links: BoundedCache[int, list[str]] = BoundedCache()
 
     def _ready(self) -> bool:
         return bool(self._settings.subgram_api_key.strip())
@@ -42,17 +42,15 @@ class SubGramAdapter:
                     "max_sponsors": 8,
                 },
                 headers=self._headers(),
-                timeout=self._settings.op_timeout_sec,
+                timeout_sec=self._settings.op_timeout_sec,
             )
             data = as_dict(payload)
             if status >= 500 or data.get("status") == "error":
-                return OpResult.fail_open_result(
-                    self.name, str(data.get("message") or status)
-                )
+                return OpResult.fail_open_result(self.name, str(data.get("message") or status))
             if data.get("status") in {"ok", "success"} and not _unsubscribed(data):
                 return OpResult.ok(self.name)
             sponsors = _sponsors_from(data)
-            self._links[user.user_id] = [item.url for item in sponsors]
+            self._links.set(user.user_id, [item.url for item in sponsors])
             if not sponsors and data.get("status") != "warning":
                 return OpResult.ok(self.name)
             return OpResult.blocked(
@@ -66,7 +64,7 @@ class SubGramAdapter:
     async def verify(self, user: OpContext) -> OpResult:
         if not self._ready():
             return OpResult.skip(self.name, "SUBGRAM_API_KEY не задан")
-        links = self._links.get(user.user_id, [])
+        links = self._links.get(user.user_id) or []
         if not links:
             return await self.check(user)
         try:
@@ -74,13 +72,11 @@ class SubGramAdapter:
                 f"{self._base()}/get-user-subscriptions",
                 json={"user_id": user.user_id, "links": links},
                 headers=self._headers(),
-                timeout=self._settings.op_timeout_sec,
+                timeout_sec=self._settings.op_timeout_sec,
             )
             data = as_dict(payload)
             if status >= 500 or data.get("status") == "error":
-                return OpResult.fail_open_result(
-                    self.name, str(data.get("message") or status)
-                )
+                return OpResult.fail_open_result(self.name, str(data.get("message") or status))
             remaining = [
                 Sponsor(
                     title=str(item.get("resource_name") or "Спонсор SubGram"),

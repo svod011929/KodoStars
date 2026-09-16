@@ -1,115 +1,86 @@
+"""BotoHub OP adapter — https://botohub.me/integration
+
+``POST https://botohub.me/get-tasks-extended`` with header ``Auth: <token>`` and body
+``{"chat_id": <telegram user id>, "max_op": N}`` returns::
+
+    {"tasks": [{"url": ..., "resource_id": ..., "completed": bool}, ...],
+     "completed": bool, "skip": bool}
+
+Sponsors are pinned to the user for ~3 minutes, so «Я подписался» simply repeats
+the same request and reads the fresh ``completed`` flags. ``skip`` means BotoHub has
+nothing to show; a blocked bot or an invalid request yields ``{"tasks": []}``.
+Errors (401 ``{"error": "Unauthorized"}``, 400, 5xx, transport) → fail-open.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
 from app.config import Settings
-from app.op.base import OpContext, OpResult, Sponsor
-from app.op.http import as_dict, as_list, post_json
+from app.op.base import OpContext, OpResult, Sponsor, title_from_link
+from app.op.http import as_dict, post_json
 
 
 class BotoHubAdapter:
-    """BotoHub (botohub.me) OP adapter.
-
-    Public site does not publish a frozen OpenAPI dump. The adapter follows the
-    same exchange pattern as other OP hubs: POST /sponsors then POST /sponsors/check
-    with an API key. Override BOTOHUB_API_URL if your cabinet shows a different base.
-    Missing key → skip. HTTP/5xx/parse errors → fail-open.
-    """
-
     name = "botohub"
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._links: dict[int, list[str]] = {}
 
     def _ready(self) -> bool:
         return bool(self._settings.botohub_api_key.strip())
 
     def _headers(self) -> dict[str, str]:
-        return {
-            "Authorization": f"Bearer {self._settings.botohub_api_key}",
-            "X-API-Key": self._settings.botohub_api_key,
-            "Content-Type": "application/json",
-        }
+        return {"Auth": self._settings.botohub_api_key, "Content-Type": "application/json"}
 
-    def _base(self) -> str:
-        return self._settings.botohub_api_url.rstrip("/")
+    def _url(self) -> str:
+        return f"{self._settings.botohub_api_url.rstrip('/')}/get-tasks-extended"
 
     async def check(self, user: OpContext) -> OpResult:
         if not self._ready():
             return OpResult.skip(self.name, "BOTOHUB_API_KEY не задан")
-        body: dict = {
-            "user_id": user.user_id,
-            "chat_id": user.chat_id,
-            "first_name": user.first_name,
-            "username": user.username,
-            "language_code": user.language_code or "ru",
-        }
-        if self._settings.botohub_bot_id:
-            body["bot_id"] = self._settings.botohub_bot_id
+        body: dict[str, Any] = {"chat_id": user.user_id}
+        if self._settings.botohub_max_op > 0:
+            body["max_op"] = self._settings.botohub_max_op
         try:
             status, payload = await post_json(
-                f"{self._base()}/sponsors",
+                self._url(),
                 json=body,
                 headers=self._headers(),
-                timeout=self._settings.op_timeout_sec,
+                timeout_sec=self._settings.op_timeout_sec,
             )
-            data = as_dict(payload)
-            if status >= 500 or str(data.get("status", "")).lower() in {"error", "fail"}:
-                return OpResult.fail_open_result(
-                    self.name, str(data.get("message") or status)
-                )
-            sponsors = _sponsors(data)
-            self._links[user.user_id] = [item.url for item in sponsors]
-            if not sponsors:
-                return OpResult.ok(self.name)
-            return OpResult.blocked(self.name, sponsors, "Подпишитесь на спонсоров BotoHub.")
         except Exception as exc:
             return OpResult.fail_open_result(self.name, str(exc))
+        data = as_dict(payload)
+        if status >= 400 or data.get("error"):
+            return OpResult.fail_open_result(self.name, str(data.get("error") or status))
+        if data.get("skip") is True or data.get("completed") is True:
+            return OpResult.ok(self.name)
+        pending = _pending_sponsors(data.get("tasks"))
+        if not pending:
+            return OpResult.ok(self.name)
+        return OpResult.blocked(self.name, pending, "Подпишитесь на спонсоров и нажмите «Я подписался».")
 
     async def verify(self, user: OpContext) -> OpResult:
-        if not self._ready():
-            return OpResult.skip(self.name, "BOTOHUB_API_KEY не задан")
-        links = self._links.get(user.user_id, [])
-        if not links:
-            return await self.check(user)
-        try:
-            status, payload = await post_json(
-                f"{self._base()}/sponsors/check",
-                json={"user_id": user.user_id, "links": links},
-                headers=self._headers(),
-                timeout=self._settings.op_timeout_sec,
-            )
-            data = as_dict(payload)
-            if status >= 500:
-                return OpResult.fail_open_result(self.name, str(status))
-            remaining = [
-                Sponsor(
-                    title=str(item.get("name") or item.get("title") or "Спонсор BotoHub"),
-                    url=str(item.get("link") or item.get("url") or ""),
-                    kind=str(item.get("type") or "channel"),
-                )
-                for item in as_list(data)
-                if isinstance(item, dict)
-                and str(item.get("status")) not in {"subscribed", "ok", "completed"}
-                and (item.get("link") or item.get("url"))
-            ]
-            if remaining:
-                return OpResult.blocked(self.name, remaining)
-            return OpResult.ok(self.name)
-        except Exception as exc:
-            return OpResult.fail_open_result(self.name, str(exc))
+        return await self.check(user)
 
 
-def _sponsors(data: dict) -> list[Sponsor]:
+def _pending_sponsors(tasks: Any) -> list[Sponsor]:
+    if not isinstance(tasks, list):
+        return []
     result: list[Sponsor] = []
-    for item in as_list(data):
-        if not isinstance(item, dict):
+    for item in tasks:
+        if isinstance(item, str):
+            # Plain /get-tasks format: bare links, completed ones are already removed.
+            url = item
+        elif isinstance(item, dict):
+            if item.get("completed") is True:
+                continue
+            url = str(item.get("url") or item.get("link") or "")
+        else:
             continue
-        url = str(item.get("link") or item.get("url") or "")
-        if not url or str(item.get("status")) == "subscribed":
+        if not url:
             continue
-        result.append(
-            Sponsor(
-                title=str(item.get("name") or item.get("title") or "Спонсор BotoHub"),
-                url=url,
-                kind=str(item.get("type") or "channel"),
-            )
-        )
+        kind = "bot" if "?start" in url or url.rstrip("/").lower().endswith("bot") else "channel"
+        result.append(Sponsor(title=title_from_link(url, "Спонсор BotoHub"), url=url, kind=kind))
     return result

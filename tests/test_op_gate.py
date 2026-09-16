@@ -25,10 +25,7 @@ async def test_gate_skips_then_blocks(session, settings) -> None:
         "subgram",
         OpResult.blocked("subgram", [Sponsor(title="Ch", url="https://t.me/x")]),
     )
-    rest = [
-        _Stub(name, OpResult.ok(name))
-        for name in ("botohub", "piarflow", "tgrass", "manual")
-    ]
+    rest = [_Stub(name, OpResult.ok(name)) for name in ("botohub", "piarflow", "tgrass", "trafsly", "manual")]
     gate = OpGate(settings, [flyer, sub, *rest])
     ctx = OpContext(1, 1, "A", None, "ru", False)
     result = await gate.enforce(ctx, session)
@@ -44,7 +41,7 @@ async def test_gate_fail_open_continues(session, settings) -> None:
     flyer = _Stub("flyer", OpResult.fail_open_result("flyer", "timeout"))
     others = [
         _Stub(name, OpResult.ok(name))
-        for name in ("subgram", "botohub", "piarflow", "tgrass", "manual")
+        for name in ("subgram", "botohub", "piarflow", "tgrass", "trafsly", "manual")
     ]
     gate = OpGate(settings, [flyer, *others])
     result = await gate.enforce(

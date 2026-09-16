@@ -22,39 +22,80 @@
 
 # KodoStars
 
-Telegram-бот на **Python 3.12 / aiogram 3**: реферальная экономика на внутренних Stars, ежедневки, задания, бусты за **Telegram Stars (XTR)** и очередь выводов. Монетизация трафика — каскад обязательной подписки (ОП): **Flyer → SubGram → BotoHub → PiarFlow → TGrass → manual**.
+Telegram-бот на **Python 3.12 / aiogram 3**: реферальная экономика на внутренних Stars, ежедневки,
+задания, промокоды, бусты за **Telegram Stars (XTR)**, очередь выводов с холдом средств и
+полноценная **админ-панель внутри Telegram**. Монетизация трафика — каскад обязательной подписки (ОП):
+**Flyer → SubGram → BotoHub → PiarFlow → TGrass → Trafsly → свои каналы**.
 
 Интерфейс — русский. Выплаты пользователям — **только Telegram Stars**. CryptoBot нет.
 
 Автор: [KodoDrive](https://github.com/svod011929)
 
-## Возможности
+## Что умеет бот
 
-- `/start` и deep-link `ref_<tg_id>`
-- Многоуровневые рефералы (по умолчанию 2), антифрод: бонус после минимальной активности
-- Ежедневная серия, задания, уровни с множителями
-- Покупка бустов через `sendInvoice` с валютой `XTR`
-- Заявки на вывод → админ согласовывает → подтверждает ручную отправку Stars
-- Админка: статистика, очередь выводов, тумблеры провайдеров, рассылка, бан
-- Каскад ОП за одним `OpGate`: ключ не задан → skip, ошибка API → fail-open
+### Для пользователя
 
-## Стек
+- `/start` и deep-link `ref_<tg_id>`; реферер привязывается **только при первом запуске** (защита от переатрибуции старых аккаунтов)
+- Двухуровневая рефералка: бонус за активацию друга + процент с его заработка; уведомления «пришёл новый друг» и «друг активировался: +N ⭐»
+- Кнопка **«Поделиться ссылкой»** (`t.me/share/url`) и место в топе рефереров
+- Ежедневка с серией, экран-превью «сколько получу сегодня» и таймером до сброса
+- Задания: подписка на канал (проверка через `getChatMember`), приглашения, серии, переход по ссылке; автозачёт по событиям
+- Уровни (XP → множитель до ×2) с прогресс-баром, бусты-множители и паки Stars за XTR
+- Промокоды с лимитом активаций и сроком действия
+- Топ по рефералам и по заработку за 7 дней (ники маскируются)
+- История операций с пагинацией, список заявок, отмена своей `pending`-заявки
+- Вывод: быстрые суммы, своя сумма, холд средств, уведомления о каждом изменении статуса
+- `/menu`, `/profile`, `/help`, `/terms`, `/paysupport` (обязательные для ботов, принимающих Stars)
 
-- aiogram 3.x, asyncio
-- SQLAlchemy 2 + aiosqlite (SQLite MVP, URL готов к Postgres)
-- pydantic-settings, structlog
-- `create_all` при старте (для продакшена с Postgres подключите Alembic)
+### Для администратора (`/admin`)
+
+| Раздел | Возможности |
+| --- | --- |
+| 📊 Статистика | пользователи всего/сегодня/7д/30д, регистрации по дням, DAU/WAU, баны и блокировки бота, воронка рефералов, экономика по видам начислений, холд, выводы, выручка XTR, **баланс Stars бота** (`getMyStarBalance`), сверка балансов с леджером |
+| 👥 Пользователи | поиск по ID/@username, карточка (баланс, холд, уровень, рефералы, платежи, выплаты, фрод), ±баланс с причиной, бан/разбан, заметка, сообщение пользователю, леджер, список рефералов, подозрительные рефереры |
+| 💸 Выводы | очередь по статусам с пагинацией, карточка с контекстом пользователя, согласовать / отклонить с причиной / подтвердить выплату; карточка новой заявки приходит админам сразу |
+| 📣 Рассылка | любой тип контента (`copyMessage`), опциональная URL-кнопка, аудитория (все / активные 7д / активированные), тест себе, фоновая отправка с rate-limit и обработкой `RetryAfter`, прогресс-карточка, остановка |
+| 📋 Задания / 🚀 Бусты | мастер создания, редактирование полей, вкл/выкл, удаление (мягкое, если были выполнения/продажи) |
+| 🎟 Промокоды | создание (код или `auto`), награда, лимит, срок, вкл/выкл |
+| 💳 Платежи | список покупок, карточка, **возврат** через `refundStarPayment` с откатом начисления / отключением буста |
+| ⚙️ Настройки | экономика и операционные флаги меняются **без перезапуска** (хранятся в БД, валидируются как `.env`) |
+| 🔒 ОП-провайдеры / 📢 Каналы ОП | тумблеры каскада, список своих каналов с проверкой прав бота |
+| 🛡 Админы | владельцы из `ADMIN_IDS` добавляют/удаляют админов прямо в боте |
+| 🧾 Журнал / 🕵️ Антифрод | аудит всех админ-действий, лента фрод-событий |
+| 🗂 Данные | экспорт CSV (пользователи, выводы, леджер, платежи), импорт пользователей CSV |
+
+Режим обслуживания, поддержка и лимиты вывода — тоже переключаются из панели.
+
+## Стек и архитектура
+
+- aiogram 3.x, asyncio, FSM (MemoryStorage)
+- SQLAlchemy 2 + aiosqlite (SQLite с WAL по умолчанию) или PostgreSQL (`asyncpg`)
+- **Alembic**: миграции применяются автоматически на старте; старая БД, созданная через `create_all`, штампуется базовой ревизией и обновляется
+- pydantic-settings (`.env`) + переопределения в таблице `app_settings`
+- structlog (JSON или консоль), контекст `update_id`/`user_id` в каждой записи
+
+Ключевые решения:
+
+- **Баланс** — колонка `users.balance`, изменяемая одним атомарным `UPDATE … RETURNING`; леджер — полный журнал с `balance_after`. Гонок при параллельных начислениях нет; есть инструмент сверки.
+- **Вывод с холдом**: сумма списывается при создании заявки, возвращается при отклонении/отмене, `confirm_sent` только фиксирует факт выплаты.
+- **Платежи идемпотентны** по `telegram_payment_charge_id` — повторная доставка `successful_payment` не начисляет дважды.
+- **Доменные события** собираются в сессии и превращаются в уведомления только после `commit` (пользователь никогда не получит сообщение о неслучившемся).
+- **Транзакция не пересекает сетевой I/O**: перед каждым вызовом Telegram API (request-middleware бота) и перед каскадом ОП текущая сессия коммитится, поэтому единственный писатель SQLite не блокируется на время HTTP-ожиданий. Апдейты одного пользователя обрабатываются последовательно (`UserLockMiddleware`), разных — параллельно.
+- Глобальный обработчик ошибок: пользователю — мягкий ответ, владельцам — трейсбек (с антиспамом).
+- Throttle-middleware, трекинг блокировки бота (`my_chat_member`), fail-open для внешних ОП-сервисов.
 
 ## Установка
 
 ```bash
 python3.12 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Заполните `BOT_TOKEN` (BotFather) и `ADMIN_IDS` (ваши Telegram ID через запятую).
+Заполните `BOT_TOKEN` (BotFather) и `ADMIN_IDS` (ваши Telegram ID через запятую). Для платежей
+в Stars у бота ничего дополнительно включать не нужно; для проверки подписок добавьте бота
+администратором в каналы.
 
 ## Запуск
 
@@ -62,9 +103,18 @@ cp .env.example .env
 python -m app
 ```
 
-На хостинг-панелях (RubyHost / Pterodactyl) укажите `APP PY FILE=main.py` в корне проекта. Не ставьте `app/__main__.py` — тогда падает `import app` (`ModuleNotFoundError`).
+Или через Docker:
 
-Точка входа поднимает БД, сидирует каталог и стартует long polling. С плейсхолдер-токеном процесс тоже запускает polling — Telegram API ответит ошибкой авторизации, это ожидаемо.
+```bash
+docker compose up -d --build
+```
+
+На хостинг-панелях (RubyHost / Pterodactyl) укажите `APP PY FILE=main.py` в корне проекта.
+Не ставьте `app/__main__.py` — тогда падает `import app` (`ModuleNotFoundError`).
+
+Точка входа: применяет миграции, сидирует каталог заданий/бустов, загружает админов и стартует
+long polling. С плейсхолдер-токеном процесс тоже запускается — Telegram ответит ошибкой
+авторизации, это ожидаемо.
 
 ## Переменные окружения
 
@@ -72,73 +122,187 @@ python -m app
 
 | Группа | Ключи |
 | --- | --- |
-| Telegram | `BOT_TOKEN`, `ADMIN_IDS` |
+| Telegram | `BOT_TOKEN`, `ADMIN_IDS`, `SUPPORT_CONTACT` |
+| Веб / антитвинк | `WEB_PUBLIC_URL`, `SERVER_PORT`, `DEVICE_CHECK_ENABLED`, `DEVICE_CHECK_FOR_WITHDRAW`, `TWINK_BLOCK_REFERRAL`, `TWINK_BLOCK_WITHDRAW`, `TWINK_REQUIRE_IP_MATCH`, `TWINK_IP_WINDOW_DAYS` |
 | БД | `DATABASE_URL` (`sqlite+aiosqlite:///./data/kodostars.db` или `postgresql+asyncpg://…`) |
-| Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, ежедневка, `WITHDRAW_MIN` |
-| Flyer | `FLYER_ENABLED`, `FLYER_API_KEY`, `FLYER_API_URL` |
-| SubGram | `SUBGRAM_ENABLED`, `SUBGRAM_API_KEY`, `SUBGRAM_API_URL` |
-| BotoHub | `BOTOHUB_ENABLED`, `BOTOHUB_API_KEY`, `BOTOHUB_API_URL`, `BOTOHUB_BOT_ID` |
-| PiarFlow | `PIARFLOW_ENABLED`, `PIARFLOW_API_KEY`, `PIARFLOW_API_URL` |
-| TGrass | `TGRASS_ENABLED`, `TGRASS_API_KEY`, `TGRASS_API_URL`, `TGRASS_CHANNELS` |
+| Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, `NOTIFY_REFERRER`, ежедневка, `SIGNUP_BONUS`, `CLAIM_COOLDOWN_SECONDS` |
+| Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS` |
+| Операционные | `MAINTENANCE_MODE`, `MAINTENANCE_TEXT`, `BROADCAST_RATE_PER_SEC`, `THROTTLE_SECONDS` |
+| Flyer / SubGram / BotoHub / PiarFlow / TGrass / Trafsly | `*_ENABLED`, `*_API_KEY`, `*_API_URL`, `FLYER_TASKS_LIMIT`, `BOTOHUB_MAX_OP`, `PIARFLOW_MAX_SPONSORS`, `TGRASS_OFFERS_LIMIT`, `TGRASS_CHANNELS`, `TRAFSLY_MAX_SPONSORS` |
 | Manual | `MANUAL_ENABLED`, `MANUAL_OP_CHANNELS` (`@channel` или `-100…`) |
+| Логи | `LOG_LEVEL`, `LOG_JSON` |
 
-Провайдер без ключа не блокирует пользователей. Админ может выключить провайдера в рантайме (таблица `provider_states`).
+Все параметры экономики, лимиты вывода, каналы manual-ОП, контакт поддержки и режим обслуживания
+можно переопределить в **Админка → ⚙️ Настройки**. Переопределение хранится в БД, помечается ✏️
+и сбрасывается к значению из `.env` одной кнопкой.
 
-## Как добавить OP-провайдера
+## Антитвинк: проверка устройства через Mini App
 
-1. Создайте `app/op/myprovider.py` с классом-адаптером:
-   - `name: str`
-   - `async def check(user) -> OpResult`
-   - `async def verify(user) -> OpResult` (кнопка «Я подписался»)
-2. Если нет ключа — `OpResult.skip(...)`.
-   Если API упал — `OpResult.fail_open_result(...)`.
-   Если есть невыполненные спонсоры — `OpResult.blocked(name, sponsors)`.
-3. Зарегистрируйте адаптер в `default_adapters()` и имя в `CASCADE` / `PROVIDER_NAMES` (`app/op/gate.py`, `app/db/seed.py`).
-4. Добавьте `*_ENABLED` и ключи в `app/config.py` и `.env.example`.
+Мультиаккаунты («твинки») — главный способ накрутки рефералки. Бот поднимает встроенный
+веб-сервер (aiohttp) на порту `SERVER_PORT`, доступный по HTTPS-адресу контейнера
+(`WEB_PUBLIC_URL`), и показывает пользователю кнопку **«🛡 Подтвердить устройство»** —
+это Telegram Mini App. Страница за секунду собирает отпечаток устройства (user agent,
+экран, GPU/canvas, таймзона, языки, шрифты, платформа и версия Telegram), хэширует его и
+отправляет на `/api/device` вместе с `initData`. Сервер проверяет подпись `initData`
+(HMAC на токене бота — подделать чужой `user_id` невозможно), добавляет IP и связывает
+отпечаток с аккаунтом.
 
-Контракты текущих адаптеров:
+Политика (все флаги — в **Настройки → Антитвинк**, без перезапуска):
 
-- **Flyer** — `POST https://api.flyerservice.io/check` (`key`, `user_id`) и `get_tasks`
-- **SubGram** — `POST /get-sponsors`, проверка `POST /get-user-subscriptions`, заголовок `Auth`
-- **BotoHub** — `POST {BOTOHUB_API_URL}/sponsors` и `/sponsors/check` (Bearer / X-API-Key). Базовый URL кабинета можно переопределить
-- **PiarFlow** — `POST https://piarflow.com/v1/sponsors` и `/sponsors/check`, `Authorization: Bearer`
-- **TGrass** — HTTP `/check` при наличии ключа + `getChatMember` по `TGRASS_CHANNELS`
-- **manual** — только `getChatMember` по `MANUAL_OP_CHANNELS`
+- Пока устройство не подтверждено, реферальный бонус за пользователя **не начисляется**
+  (ежедневка, задания, промокоды работают); при `DEVICE_CHECK_FOR_WITHDRAW` недоступен и вывод.
+- Второй аккаунт с тем же отпечатком помечается **твинком** (`twink_of` = первый аккаунт):
+  бонус рефереру не платится, его заработок не даёт долю рефереру, в карточке заявки на
+  вывод админ видит «👯 Твинк! То же устройство у: …». `TWINK_BLOCK_WITHDRAW` запрещает вывод.
+- `TWINK_REQUIRE_IP_MATCH` смягчает правило для популярных моделей устройств: твинк —
+  только если совпали и отпечаток, и IP за `TWINK_IP_WINDOW_DAYS` дней.
+- Админ может отметить пользователя **🤝 доверенным** (семья с одним телефоном): флаг
+  снимается, отложенный бонус выплачивается при следующей активности.
+- Раздел **🕵️ Антифрод → 👯 Твинки** показывает кластеры «одно устройство — несколько аккаунтов».
+
+Честное ограничение: отпечаток снимает браузер, и технически подкованный человек может
+подменить его на каждом аккаунте. Это отсекает массовый сценарий (несколько аккаунтов в одном
+приложении Telegram, фермы на одном устройстве), а не целевую атаку — поэтому IP и история
+проверок хранятся и видны админу. Эндпоинты: `GET /` (лендинг), `GET /health`,
+`GET /verify` (Mini App), `POST /api/device` (лимит 20 запросов/мин с IP).
 
 ## Вывод Stars
 
-Bot API **не умеет** перевести произвольное число Stars с баланса бота на пользователя. `sendInvoice` / `refundStarPayment` — это приём и возврат оплаты боту, не выплата. `sendGift` отправляет подарок, а не сумму XTR из заявки.
+Bot API **не умеет** перевести произвольное число Stars с баланса бота на пользователя
+(`sendInvoice` / `refundStarPayment` — приём и возврат оплаты боту; `sendGift` отправляет подарок,
+а не сумму из заявки). Поэтому очередь такая:
 
-Поэтому очередь такая:
-
-1. Пользователь создаёт заявку (баланс не списывается).
-2. Админ нажимает **Согласовать** → статус `approved_manual`, в карточке инструкция.
-3. Админ отправляет Stars вручную (подарок Stars с личного аккаунта или ваш согласованный канал).
-4. Админ жмёт **Подтвердить отправку** → статус `sent`, леджер дебетуется.
+1. Пользователь создаёт заявку — сумма **резервируется** (списывается в холд), админы получают карточку с кнопками.
+2. Админ нажимает **Согласовать** → пользователь получает уведомление.
+3. Админ отправляет Stars вручную (подарок Stars с личного аккаунта или согласованный канал).
+4. Админ жмёт **Подтвердить отправку** → статус `sent`, пользователь уведомлён.
+5. **Отклонить** (с причиной) или отмена самим пользователем — холд возвращается на баланс.
 
 Не подтверждайте отправку, пока Stars реально не ушли.
 
-## Тесты
+## Платежи и возвраты
+
+Бусты продаются как цифровые товары за XTR (`sendInvoice`, `currency="XTR"`). Каждый платёж
+сохраняется в `payments`. Админ может вернуть покупку из карточки платежа: бот вызывает
+`refundStarPayment`, списывает начисленные Stars пака (баланс может уйти в минус — это видно в
+карточке) или мгновенно отключает множитель, пользователь получает уведомление.
+Команды `/paysupport` и `/terms` отвечают требованиям Telegram к ботам, принимающим Stars.
+
+## Каскад ОП
+
+Провайдер без ключа не блокирует пользователей (skip), ошибка API — fail-open. Порядок фиксирован:
+Flyer → SubGram → BotoHub → PiarFlow → TGrass → Trafsly → свои каналы. Админ может выключить любого
+провайдера в рантайме (таблица `provider_states`) и управлять списком своих каналов.
+
+Адаптеры реализованы по официальной документации сервисов, контракты закреплены тестами
+(`tests/test_op_adapters.py`) на примерах ответов из документации:
+
+| Провайдер | Документация | Запрос | Проверка «Я подписался» |
+| --- | --- | --- | --- |
+| Flyer | [api.flyerhubs.com](https://api.flyerhubs.com/) | ключ `sub`: `POST /check` (`skip`), Flyer сам присылает сообщение со спонсорами; ключ `tasks`: `POST /get_tasks` → `result[].links[]`, статусы `incomplete/abort` = не выполнено | повтор запроса; тип ключа определяется через `POST /get_me` |
+| SubGram | subgram.ru | `POST /get-sponsors`, заголовок `Auth` | `POST /get-user-subscriptions` |
+| BotoHub | [botohub.me/integration](https://botohub.me/integration) | `POST /get-tasks-extended`, заголовок `Auth`, тело `{chat_id, max_op}` → `tasks[].{url, completed}`, `completed`, `skip` | повтор запроса (спонсоры закреплены на 3 мин) |
+| PiarFlow | [piarflow.com/api-docs](https://piarflow.com/api-docs) | `POST /sponsors`, `Authorization: Bearer` → `sponsors[].{link, status}` (`not_counted` = выполнено) | `POST /sponsors/check` с показанными `links` |
+| TGrass | [tgrass.space/integration](https://tgrass.space/integration) | `POST /offers`, заголовок `Auth`, тело `{tg_user_id, is_premium, lang, tg_login}` → `status ok/not_ok/no_offers`, `offers[].subscribed` | повтор запроса; плюс локальный список `TGRASS_CHANNELS` |
+| Trafsly | [trafsly.com/api-docs](https://trafsly.com/api-docs) | `POST /api/v1/get-sponsors`, заголовок `Auth: at_…` → `status ok/warning`, `sponsors[].{ads_id, link, title}` | `POST /api/v1/confirm-subscription` по каждому выданному `ads_id`; `Sponsor was not shown` / `Order not found` → повторный запрос списка |
+| manual | — | `getChatMember` по `MANUAL_OP_CHANNELS` (редактируется из панели) | повтор проверки |
+
+Старые плейсхолдеры URL из прежнего `.env.example` (`api.flyerservice.io`, `botohub.me/api/v1`,
+`api.tgrass.online/v1`) автоматически заменяются на документированные хосты.
+
+### Свои каналы: публичные, приватные и платные
+
+Запись канала — `@username`, `@username|Название` или
+`-1001234567890|https://t.me/+ссылка|Название`. Первое поле — что бот **проверяет** через
+`getChatMember` (бот должен быть администратором канала), ссылка — куда ведёт **кнопка**,
+название — подпись кнопки. Для приватных и платных каналов ссылка обязательна: `t.me/c/<id>`
+открывается только у участников. Платный канал подключается платной пригласительной ссылкой
+(цена в Stars) — оплативший подписку числится `member`, истёкшая подписка → `left`, и ОП снова
+покажет кнопку.
+
+В панели (**📢 Каналы ОП → Добавить**) достаточно **переслать любой пост из канала**: бот
+определит ID и название, для приватного канала попросит ссылку, а по команде `auto` /
+`auto 50` сам создаст бесплатную или платную (50 ⭐/мес) пригласительную ссылку
+(`createChatSubscriptionInviteLink`, нужно право «Приглашать пользователей»). Тот же формат
+работает в заданиях типа «Подписка на канал».
+
+### Как добавить OP-провайдера
+
+1. Создайте `app/op/myprovider.py` с классом-адаптером:
+   - `name: str`
+   - `async def check(user: OpContext) -> OpResult`
+   - `async def verify(user: OpContext) -> OpResult` (кнопка «Я подписался»)
+2. Если нет ключа — `OpResult.skip(...)`. Если API упал — `OpResult.fail_open_result(...)`.
+   Если есть невыполненные спонсоры — `OpResult.blocked(name, sponsors)`.
+3. Зарегистрируйте адаптер в `default_adapters()` и имя в `CASCADE` / `PROVIDER_TITLES` (`app/op/gate.py`)
+   и `PROVIDER_NAMES` (`app/db/seed.py`).
+4. Добавьте `*_ENABLED` и ключи в `app/config.py` и `.env.example`; учтите их в `provider_configured()`.
+
+Эффективные настройки (с учётом переопределений из БД) доступны адаптеру через `OpContext.settings`.
+Добавьте контрактный тест в `tests/test_op_adapters.py` с примером ответа из документации провайдера —
+`FakeHttp` подменяет `post_json` в модуле адаптера.
+
+## Миграции
+
+Схема управляется Alembic (`app/migrations`). При старте бот сам приводит БД к актуальной ревизии:
+
+- пустая БД → создаётся с нуля;
+- БД от версии 0.1 (`create_all`, без `alembic_version`) → штампуется `0001_baseline` и обновляется,
+  баланс бэкфиллится из леджера;
+- иначе — обычный `upgrade head`.
+
+Ручная работа с миграциями из корня проекта:
 
 ```bash
-pytest
+alembic current
+alembic revision --autogenerate -m "describe change"
+alembic upgrade head
 ```
 
-Покрыты леджер (credit/debit/баланс) и атрибуция рефералов (уровни, самореферал, порог активности, доля с заработка), плюс каскад OpGate.
+Новые миграции держите аддитивными (ADD COLUMN / CREATE TABLE), чтобы они применялись на SQLite без пересборки таблиц.
+
+## Тесты и качество
+
+```bash
+pytest          # 124 теста
+ruff check .    # линт
+ruff format .   # форматирование
+```
+
+Покрыты: атомарный леджер и сверка, холд/возврат/легаси-путь выводов, идемпотентность платежей и
+возвраты, ежедневка и серии, задания (включая проверку подписки), рефералы (первый старт,
+уровни, доля), промокоды, настройки в рантайме, роли админов, аудит, фоновая рассылка (блокировки,
+`RetryAfter`, отмена), статистика/лидерборд/экспорт, миграции (fresh == `create_all`, легаси-штамп),
+контракты ОП-провайдеров (Flyer sub/tasks, BotoHub, TGrass, PiarFlow, Trafsly — на примерах из
+документации, включая ошибки и fail-open), middleware и **end-to-end сценарии через реальный
+диспетчер** с фейковой Telegram-сессией
+(`tests/fake_telegram.py`): старт и ОП-гейт, рефералы, ежедневка, вывод с уведомлениями, админ-панель,
+настройки и режим обслуживания, платежи с возвратом, промокоды, задания, рассылка, экспорт, управление админами.
 
 ## Структура
 
 ```
-main.py                # RubyHost / Pterodactyl: APP PY FILE=main.py
+main.py                  # RubyHost / Pterodactyl: APP PY FILE=main.py
+alembic.ini              # CLI Alembic (бот применяет миграции сам)
+Dockerfile, docker-compose.yml
 app/
-  __main__.py          # python -m app
-  config.py
-  bot/handlers/        # пользователь + админ
-  bot/middlewares/     # сессия, пользователь, OpGate
-  services/            # ledger, referrals, daily, tasks, boosts, withdrawals
-  op/                  # gate + адаптеры
-  db/                  # models, session, seed
-tests/
+  __main__.py            # жизненный цикл: миграции → сид → polling → graceful shutdown
+  config.py              # Settings + белый список рантайм-настроек
+  bot/
+    factory.py           # Bot, Dispatcher, порядок middleware
+    handlers/            # пользовательские роутеры (start, commands, cabinet, earn, withdraw, promo, payments, system)
+    admin/               # админ-панель: router, texts, keyboards, states + разделы
+    middlewares/         # context, throttle, db(+events), runtime(settings/access/maintenance), user, op_gate
+    notify.py            # доменные события → уведомления Telegram
+    errors.py            # глобальный обработчик ошибок
+  services/              # ledger, users, referrals, daily, tasks, boosts, payments, economy,
+                         # withdrawals, promo, access, audit, app_settings, broadcasts, stats,
+                         # leaderboard, export, antifraud, events
+  op/                    # OpGate + адаптеры, общий aiohttp-клиент
+  db/                    # models, session, seed, migrate
+  migrations/            # Alembic env + versions
+tests/                   # pytest (сервисы, middleware, миграции, e2e через диспетчер)
+docs/superpowers/specs/  # дизайн-спека v1.0
 ```
 
 ---

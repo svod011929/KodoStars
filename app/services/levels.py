@@ -18,6 +18,12 @@ LEVEL_TABLE: tuple[tuple[int, int, int], ...] = (
     (10, 4200, 200),
 )
 
+XP_DAILY = 10
+XP_TASK = 12
+XP_BOOST = 15
+XP_REFERRAL_L1 = 8
+XP_REFERRAL_L2 = 3
+
 
 @dataclass(frozen=True, slots=True)
 class LevelInfo:
@@ -26,6 +32,13 @@ class LevelInfo:
     multiplier_bp: int
     next_level: int | None
     next_xp: int | None
+
+    def progress(self, xp: int) -> float:
+        """0.0..1.0 progress towards the next level (1.0 at max level)."""
+        if self.next_xp is None:
+            return 1.0
+        span = max(self.next_xp - self.min_xp, 1)
+        return min(max((xp - self.min_xp) / span, 0.0), 1.0)
 
 
 def info_for_xp(xp: int) -> LevelInfo:
@@ -52,6 +65,16 @@ def apply_multipliers(base: int, *multipliers_bp: int) -> int:
             continue
         amount = (amount * bp + 50) // 100
     return max(amount, 0)
+
+
+def format_multiplier(bp: int) -> str:
+    text = f"{bp / 100:.2f}".rstrip("0").rstrip(".")
+    return f"×{text}"
+
+
+def progress_bar(ratio: float, width: int = 10) -> str:
+    filled = round(min(max(ratio, 0.0), 1.0) * width)
+    return "▰" * filled + "▱" * (width - filled)
 
 
 async def add_xp(session: AsyncSession, user: User, xp: int) -> LevelInfo:

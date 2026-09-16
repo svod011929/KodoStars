@@ -3,17 +3,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import BoostKind, BoostProduct, ProviderState, Task, TaskKind
 
-PROVIDER_NAMES = ("flyer", "subgram", "botohub", "piarflow", "tgrass", "manual")
+PROVIDER_NAMES = ("flyer", "subgram", "botohub", "piarflow", "tgrass", "trafsly", "manual")
 
 DEFAULT_TASKS = (
     {
         "slug": "invite_one",
         "title": "Приведи друга",
-        "description": "Один реферал должен пройти антифрод-активацию.",
+        "description": "Один реферал должен пройти активацию (набрать очки активности).",
         "kind": TaskKind.INVITE.value,
         "reward": 15,
         "payload": {"invites": 1},
         "sort_order": 10,
+    },
+    {
+        "slug": "invite_five",
+        "title": "Команда из пяти",
+        "description": "Пять активных рефералов первого уровня.",
+        "kind": TaskKind.INVITE.value,
+        "reward": 60,
+        "payload": {"invites": 5},
+        "sort_order": 15,
     },
     {
         "slug": "streak_three",
@@ -25,9 +34,18 @@ DEFAULT_TASKS = (
         "sort_order": 20,
     },
     {
+        "slug": "streak_seven",
+        "title": "Неделя без пропусков",
+        "description": "Семь дней ежедневки подряд.",
+        "kind": TaskKind.STREAK.value,
+        "reward": 50,
+        "payload": {"streak": 7},
+        "sort_order": 25,
+    },
+    {
         "slug": "first_boost",
         "title": "Первый буст",
-        "description": "Купи любой буст за Telegram Stars.",
+        "description": "Купи любой буст за Telegram Stars — задание засчитается автоматически.",
         "kind": TaskKind.CUSTOM.value,
         "reward": 10,
         "payload": {"event": "boost_purchased"},
@@ -75,16 +93,12 @@ async def seed_catalog(session: AsyncSession) -> None:
         if item["slug"] not in existing_tasks:
             session.add(Task(**item, is_active=True))
 
-    existing_boosts = {
-        row.slug for row in (await session.execute(select(BoostProduct))).scalars()
-    }
+    existing_boosts = {row.slug for row in (await session.execute(select(BoostProduct))).scalars()}
     for item in DEFAULT_BOOSTS:
         if item["slug"] not in existing_boosts:
             session.add(BoostProduct(**item, is_active=True))
 
-    existing_providers = {
-        row.name for row in (await session.execute(select(ProviderState))).scalars()
-    }
+    existing_providers = {row.name for row in (await session.execute(select(ProviderState))).scalars()}
     for name in PROVIDER_NAMES:
         if name not in existing_providers:
             session.add(ProviderState(name=name, enabled=True))

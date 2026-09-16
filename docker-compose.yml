@@ -1,0 +1,30 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    # SQLite by default (DATABASE_URL from .env). For Postgres uncomment below
+    # and set DATABASE_URL=postgresql+asyncpg://kodostars:kodostars@db:5432/kodostars
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
+
+  # db:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: kodostars
+  #     POSTGRES_PASSWORD: kodostars
+  #     POSTGRES_DB: kodostars
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U kodostars"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 10
+
+# volumes:
+#   pgdata:

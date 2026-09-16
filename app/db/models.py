@@ -31,15 +31,50 @@ class LedgerKind(StrEnum):
     BOOST_PACK = "boost_pack"
     REFERRAL_BONUS = "referral_bonus"
     REFERRAL_SHARE = "referral_share"
+    WITHDRAW_HOLD = "withdraw_hold"
+    WITHDRAW_REFUND = "withdraw_refund"
     WITHDRAW_SENT = "withdraw_sent"
     ADMIN_ADJUST = "admin_adjust"
+    PROMO = "promo"
+    REFUND_REVOKE = "refund_revoke"
+
+
+LEDGER_KIND_LABELS: dict[str, str] = {
+    LedgerKind.SIGNUP.value: "Бонус за регистрацию",
+    LedgerKind.DAILY.value: "Ежедневная награда",
+    LedgerKind.TASK.value: "Задание",
+    LedgerKind.BOOST_PACK.value: "Покупка пака",
+    LedgerKind.REFERRAL_BONUS.value: "Бонус за реферала",
+    LedgerKind.REFERRAL_SHARE.value: "Доля с реферала",
+    LedgerKind.WITHDRAW_HOLD.value: "Заявка на вывод",
+    LedgerKind.WITHDRAW_REFUND.value: "Возврат по заявке",
+    LedgerKind.WITHDRAW_SENT.value: "Выплата",
+    LedgerKind.ADMIN_ADJUST.value: "Корректировка админа",
+    LedgerKind.PROMO.value: "Промокод",
+    LedgerKind.REFUND_REVOKE.value: "Возврат платежа",
+}
 
 
 class WithdrawalStatus(StrEnum):
     PENDING = "pending"
     REJECTED = "rejected"
+    CANCELLED = "cancelled"
     APPROVED_MANUAL = "approved_manual"
     SENT = "sent"
+
+
+OPEN_WITHDRAWAL_STATUSES: tuple[str, ...] = (
+    WithdrawalStatus.PENDING.value,
+    WithdrawalStatus.APPROVED_MANUAL.value,
+)
+
+WITHDRAWAL_STATUS_LABELS: dict[str, str] = {
+    WithdrawalStatus.PENDING.value: "ожидает",
+    WithdrawalStatus.REJECTED.value: "отклонена",
+    WithdrawalStatus.CANCELLED.value: "отменена",
+    WithdrawalStatus.APPROVED_MANUAL.value: "согласована",
+    WithdrawalStatus.SENT.value: "выплачена",
+}
 
 
 class BoostKind(StrEnum):
@@ -54,8 +89,51 @@ class TaskKind(StrEnum):
     CUSTOM = "custom"
 
 
+TASK_KIND_LABELS: dict[str, str] = {
+    TaskKind.SUBSCRIBE.value: "Подписка на канал",
+    TaskKind.INVITE.value: "Пригласить друзей",
+    TaskKind.STREAK.value: "Серия ежедневок",
+    TaskKind.CUSTOM.value: "Перейти по ссылке",
+}
+
+
+class PaymentStatus(StrEnum):
+    PAID = "paid"
+    REFUNDED = "refunded"
+
+
+class BroadcastStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    DONE = "done"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class BroadcastAudience(StrEnum):
+    ALL = "all"
+    ACTIVE_7D = "active_7d"
+    ACTIVATED = "activated"
+
+
+BROADCAST_AUDIENCE_LABELS: dict[str, str] = {
+    BroadcastAudience.ALL.value: "Все пользователи",
+    BroadcastAudience.ACTIVE_7D.value: "Активные за 7 дней",
+    BroadcastAudience.ACTIVATED.value: "С активированной рефкой",
+}
+
+
+class AdminRole(StrEnum):
+    OWNER = "owner"
+    ADMIN = "admin"
+
+
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index("ix_users_created_at", "created_at"),
+        Index("ix_users_last_action_at", "last_action_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -64,27 +142,43 @@ class User(Base):
     is_premium: Mapped[bool] = mapped_column(Boolean, default=False)
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
     ban_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    referred_by_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("users.id"), nullable=True
-    )
+    referred_by_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id"), nullable=True)
     referral_activated: Mapped[bool] = mapped_column(Boolean, default=False)
     activity_score: Mapped[int] = mapped_column(Integer, default=0)
     xp: Mapped[int] = mapped_column(Integer, default=0)
     level: Mapped[int] = mapped_column(Integer, default=1)
     streak: Mapped[int] = mapped_column(Integer, default=0)
+    balance: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    admin_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_daily_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_withdraw_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_action_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_op_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    blocked_bot_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Anti-multiaccount (device verification through the Mini App).
+    device_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    device_fp: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    twink_of: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    is_trusted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
     ledger_entries: Mapped[list[LedgerEntry]] = relationship(back_populates="user")
     withdrawals: Mapped[list[Withdrawal]] = relationship(back_populates="user")
+
+    @property
+    def is_twink(self) -> bool:
+        """Flagged as a multi-account and not whitelisted by an admin."""
+        return self.twink_of is not None and not self.is_trusted
+
+    @property
+    def display_name(self) -> str:
+        if self.username:
+            return f"@{self.username}"
+        return self.first_name or str(self.id)
 
 
 class LedgerEntry(Base):
@@ -101,9 +195,7 @@ class LedgerEntry(Base):
     kind: Mapped[str] = mapped_column(String(32))
     reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
     extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="ledger_entries")
 
@@ -120,9 +212,7 @@ class ReferralEdge(Base):
     referee_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     level: Mapped[int] = mapped_column(Integer)
     credited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DailyClaim(Base):
@@ -134,9 +224,7 @@ class DailyClaim(Base):
     claimed_on: Mapped[date] = mapped_column(Date)
     streak: Mapped[int] = mapped_column(Integer)
     amount: Mapped[int] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Task(Base):
@@ -160,9 +248,7 @@ class UserTask(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     task_id: Mapped[int] = mapped_column(Integer, ForeignKey("tasks.id"))
-    completed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class BoostProduct(Base):
@@ -189,9 +275,25 @@ class UserBoost(Base):
     multiplier_bp: Mapped[int] = mapped_column(Integer, default=100)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     telegram_charge_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Payment(Base):
+    """Money record for every Telegram Stars purchase (entitlement lives in UserBoost)."""
+
+    __tablename__ = "payments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("boost_products.id"), nullable=True)
+    telegram_charge_id: Mapped[str] = mapped_column(String(128), unique=True)
+    provider_charge_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    invoice_payload: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    xtr_amount: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default=PaymentStatus.PAID.value)
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    refunded_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Withdrawal(Base):
@@ -205,9 +307,7 @@ class Withdrawal(Base):
     reviewed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(back_populates="withdrawals")
 
@@ -230,6 +330,103 @@ class FraudEvent(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     kind: Mapped[str] = mapped_column(String(32))
     detail: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DeviceCheck(Base):
+    """One Mini App verification: who, from which device fingerprint and IP."""
+
+    __tablename__ = "device_checks"
+    __table_args__ = (Index("ix_device_checks_ip_created", "ip", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    fp_hash: Mapped[str] = mapped_column(String(64), index=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    tg_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    signals: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    matched_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Admin(Base):
+    """Admins managed from the bot. Env ``ADMIN_IDS`` are owners and never stored here."""
+
+    __tablename__ = "admins"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    role: Mapped[str] = mapped_column(String(16), default=AdminRole.ADMIN.value)
+    added_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AdminAction(Base):
+    __tablename__ = "admin_actions"
+    __table_args__ = (Index("ix_admin_actions_created", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    admin_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    action: Mapped[str] = mapped_column(String(48))
+    target_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    updated_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class Broadcast(Base):
+    __tablename__ = "broadcasts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    admin_id: Mapped[int] = mapped_column(BigInteger)
+    from_chat_id: Mapped[int] = mapped_column(BigInteger)
+    message_id: Mapped[int] = mapped_column(Integer)
+    button_text: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    button_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    audience: Mapped[str] = mapped_column(String(32), default=BroadcastAudience.ALL.value)
+    status: Mapped[str] = mapped_column(String(16), default=BroadcastStatus.PENDING.value)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    sent: Mapped[int] = mapped_column(Integer, default=0)
+    failed: Mapped[int] = mapped_column(Integer, default=0)
+    blocked: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True)
+    reward: Mapped[int] = mapped_column(Integer)
+    max_uses: Mapped[int] = mapped_column(Integer, default=0)
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PromoRedemption(Base):
+    __tablename__ = "promo_redemptions"
+    __table_args__ = (UniqueConstraint("promo_id", "user_id", name="uq_promo_redemption"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    promo_id: Mapped[int] = mapped_column(Integer, ForeignKey("promo_codes.id"))
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    amount: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

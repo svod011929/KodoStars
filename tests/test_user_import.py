@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import func, select
 
-from app.bot import texts
+from app.bot.admin import texts
 from app.db.models import LedgerKind, ReferralEdge, User
 from app.services import ledger, users
 from app.services.user_import import (
@@ -35,27 +35,14 @@ def test_parse_ignores_extra_columns() -> None:
 
 
 def test_parse_utf8_bom_and_empty_lines() -> None:
-    raw = (
-        "\ufeffid,username\n"
-        "\n"
-        "21767586,gramads\n"
-        "   \n"
-        "43827256,biseda1214\n"
-    ).encode("utf-8-sig")
+    raw = ("\ufeffid,username\n\n21767586,gramads\n   \n43827256,biseda1214\n").encode("utf-8-sig")
     parsed = parse_users_csv(raw)
     assert parsed.errors == []
     assert [row.user_id for row in parsed.rows] == [21767586, 43827256]
 
 
 def test_parse_invalid_rows_and_header() -> None:
-    csv = (
-        "id,username\n"
-        "not-an-id,foo\n"
-        ",emptyid\n"
-        "0,zero\n"
-        "-5,neg\n"
-        "99,ok\n"
-    )
+    csv = "id,username\nnot-an-id,foo\n,emptyid\n0,zero\n-5,neg\n99,ok\n"
     parsed = parse_users_csv(csv)
     assert [row.user_id for row in parsed.rows] == [99]
     messages = [error.format() for error in parsed.errors]
@@ -229,7 +216,7 @@ async def test_upsert_chunking_and_parse_errors_in_summary(session) -> None:
 
 
 def test_admin_import_result_text() -> None:
-    text = texts.admin_import_result(1, 2, 3, 4, ["стр. 2: некорректный id: x"])
+    text = texts.import_result(1, 2, 3, 4, ["стр. 2: некорректный id: x"])
     assert "Создано: 1" in text
     assert "Обновлено: 2" in text
     assert "Без изменений: 3" in text

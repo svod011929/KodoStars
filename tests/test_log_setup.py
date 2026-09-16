@@ -11,22 +11,19 @@ import importlib
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_DIR = REPO_ROOT / "app"
 
 
 def test_app_has_no_logging_py() -> None:
     shadow = APP_DIR / "logging.py"
-    assert not shadow.exists(), (
-        "app/logging.py shadows stdlib logging when the app directory is on sys.path"
-    )
+    assert not shadow.exists(), "app/logging.py shadows stdlib logging when the app directory is on sys.path"
 
 
 def test_setup_logging_imports_from_log_setup() -> None:
-    from app.log_setup import setup_logging
+    module = importlib.import_module("app.log_setup")
 
-    assert callable(setup_logging)
+    assert callable(module.setup_logging)
 
 
 def test_stdlib_logging_notset_when_app_dir_on_sys_path() -> None:

@@ -69,9 +69,7 @@ def parse_users_csv(content: str | bytes) -> CsvParseResult:
         if header is None:
             header = [_normalize_header(cell) for cell in raw]
             if "id" not in header or "username" not in header:
-                result.errors.append(
-                    CsvRowError(line_no, "ожидается заголовок id,username")
-                )
+                result.errors.append(CsvRowError(line_no, "ожидается заголовок id,username"))
                 return result
             id_idx = header.index("id")
             username_idx = header.index("username")
@@ -115,7 +113,12 @@ async def upsert_imported_users(
     *,
     chunk_size: int = CHUNK_SIZE,
 ) -> ImportResult:
-    """Insert missing users and refresh usernames. Does not touch economy."""
+    """Insert missing users and refresh usernames. Does not touch economy.
+
+    Each chunk is committed on its own so a large import never holds the SQLite
+    write lock for more than a few hundred rows; the import is idempotent, so a
+    failure half-way can simply be re-run.
+    """
     result = ImportResult()
     if chunk_size < 1:
         raise ValueError("chunk_size must be >= 1")
@@ -125,7 +128,7 @@ async def upsert_imported_users(
         result.created += created
         result.updated += updated
         result.unchanged += unchanged
-        await session.flush()
+        await session.commit()
     return result
 
 
@@ -162,9 +165,7 @@ def _normalize_username(raw: str) -> str | None:
     return username[:USERNAME_MAX_LEN]
 
 
-async def _upsert_chunk(
-    session: AsyncSession, chunk: Sequence[CsvUserRow]
-) -> tuple[int, int, int]:
+async def _upsert_chunk(session: AsyncSession, chunk: Sequence[CsvUserRow]) -> tuple[int, int, int]:
     ids = [row.user_id for row in chunk]
     existing = await session.execute(select(User).where(User.id.in_(ids)))
     by_id = {user.id: user for user in existing.scalars()}

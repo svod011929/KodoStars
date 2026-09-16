@@ -13,12 +13,12 @@ from app.db.models import User
 from app.op.base import OpContext
 from app.op.gate import OpGate
 
-
 _SKIP_PREFIXES = (
     "op:",
     "admin:",
+    "noop",
 )
-_SKIP_COMMANDS = {"/admin", "/start"}
+_SKIP_COMMANDS = {"/admin", "/start", "/help", "/paysupport", "/terms"}
 
 
 class OpGateMiddleware(BaseMiddleware):
@@ -32,7 +32,8 @@ class OpGateMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        if _should_skip(event, self._settings):
+        settings: Settings = data.get("settings", self._settings)
+        if _should_skip(event, settings):
             return await handler(event, data)
 
         user: User | None = data.get("db_user")
@@ -40,11 +41,15 @@ class OpGateMiddleware(BaseMiddleware):
         bot: Bot | None = data.get("bot")
         if user is None or session is None:
             return await handler(event, data)
-        if user.id in self._settings.admin_ids:
+        if data.get("is_admin") or user.id in settings.admin_ids:
             return await handler(event, data)
+        inner = unwrap_event(event)
         if user.is_banned:
-            return await _reply(event, texts.banned(user.ban_reason or "бан"))
-        if _op_fresh(user, self._settings.op_cache_sec):
+            if isinstance(inner, CallbackQuery):
+                await inner.answer(texts.banned_short(), show_alert=True)
+                return None
+            return await _reply(inner, texts.banned(user.ban_reason or "бан", settings.support_contact))
+        if _op_fresh(user, settings.op_cache_sec):
             return await handler(event, data)
 
         ctx = OpContext(
@@ -56,13 +61,12 @@ class OpGateMiddleware(BaseMiddleware):
             is_premium=user.is_premium,
             bot=bot,
         )
-        result = await self._gate.enforce(ctx, session)
+        result = await self._gate.enforce(ctx, session, settings=settings)
         if result.allowed:
             user.last_op_ok_at = datetime.now(UTC)
             return await handler(event, data)
 
         markup = keyboards.op_keyboard(result.sponsors)
-        inner = unwrap_event(event)
         await _reply(inner, texts.op_blocked(result.provider, result.message), markup)
         if isinstance(inner, CallbackQuery):
             await inner.answer()
@@ -72,12 +76,11 @@ class OpGateMiddleware(BaseMiddleware):
 def _should_skip(event: TelegramObject, settings: Settings) -> bool:
     event = unwrap_event(event)
     if isinstance(event, Message):
-        text = (event.text or "").split(maxsplit=1)[0]
-        if text in _SKIP_COMMANDS:
-            return True
         if event.successful_payment is not None:
             return True
-        return False
+        parts = (event.text or "").split(maxsplit=1)
+        command = parts[0] if parts else ""
+        return command in _SKIP_COMMANDS
     if isinstance(event, CallbackQuery):
         data = event.data or ""
         return any(data.startswith(prefix) for prefix in _SKIP_PREFIXES)
