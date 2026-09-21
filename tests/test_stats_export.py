@@ -12,6 +12,7 @@ from app.services.economy import fulfill_boost_payment
 
 
 async def _user(session, user_id: int, **kwargs) -> User:
+    kwargs.setdefault("username", f"s{user_id}")
     user = User(id=user_id, first_name=f"S{user_id}", **kwargs)
     session.add(user)
     await session.flush()

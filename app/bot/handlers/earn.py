@@ -7,11 +7,11 @@ from app.bot import keyboards, texts
 from app.bot.utils import parse_id, safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import BoostProduct, Task, User
-from app.op.manual import is_member
 from app.services import daily
 from app.services import tasks as task_service
 from app.services.boosts import active_boosts, get_product, list_products
 from app.services.boosts import describe as boost_detail
+from app.services.channels import is_member
 from app.services.errors import AlreadyClaimed, EconomyError
 
 router = Router(name="earn")

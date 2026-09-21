@@ -1,17 +1,13 @@
-"""Own channels OP (``manual``): membership via ``getChatMember``.
+"""Channel reference helpers for subscribe-tasks (not OP cascade).
 
-A channel entry in ``MANUAL_OP_CHANNELS`` (or a subscribe-task target) is either
-a bare reference or a pipe-separated record::
+A channel entry is either a bare reference or a pipe-separated record::
 
     @public_channel
     @public_channel|Красивое название
     -1001234567890|https://t.me/+AbCdEfGh|VIP канал
-    -1001234567890|https://t.me/+PaidLink|Платный канал
 
 The first field is what the bot *checks* (username or numeric chat id; the bot
-must be an administrator there). The link is what the user *taps* — for private
-and paid channels it has to be an invite / paid-subscription link, because
-``t.me/c/<id>`` only works for existing members. The title is the button label.
+must be an administrator there). The link is what the user *taps*.
 """
 
 from __future__ import annotations
@@ -21,8 +17,7 @@ from dataclasses import dataclass
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 
-from app.config import Settings
-from app.op.base import OpContext, OpResult, Sponsor, title_from_link
+from app.op.base import Sponsor, title_from_link
 
 _SUBSCRIBED = {"creator", "administrator", "member", "restricted"}
 _LINK_PREFIXES = ("https://", "http://", "tg://")
@@ -43,33 +38,6 @@ class ChannelEntry:
     def has_join_link(self) -> bool:
         """False when the button would point at ``t.me/c/…`` (members only)."""
         return not self.url.startswith("https://t.me/c/")
-
-
-class ManualAdapter:
-    name = "manual"
-
-    def __init__(self, settings: Settings) -> None:
-        self._settings = settings
-
-    def _channels(self, ctx: OpContext) -> list[str]:
-        settings = ctx.settings or self._settings
-        return settings.parse_channel_list(settings.manual_op_channels)
-
-    async def check(self, user: OpContext) -> OpResult:
-        channels = self._channels(user)
-        if not channels:
-            return OpResult.skip(self.name, "MANUAL_OP_CHANNELS пуст")
-        remaining = await check_channels(user.bot, user.user_id, channels)
-        if remaining:
-            return OpResult.blocked(
-                self.name,
-                remaining,
-                "Подпишитесь на каналы проекта, чтобы продолжить.",
-            )
-        return OpResult.ok(self.name)
-
-    async def verify(self, user: OpContext) -> OpResult:
-        return await self.check(user)
 
 
 def parse_channel_entry(raw: str) -> ChannelEntry:
@@ -170,5 +138,5 @@ async def check_channels(
         verdict = await is_member(bot, user_id, entry.raw)
         if verdict is False:
             remaining.append(_sponsor(entry))
-        # None → fail-open for a single unreachable chat: do not block the whole gate.
+        # None → fail-open for a single unreachable chat.
     return remaining

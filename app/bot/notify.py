@@ -72,6 +72,11 @@ class Notifier:
                     texts.notify_device_verified(bool(payload.get("twink")), bool(payload.get("first_time"))),
                     reply_markup=texts.home_button(),
                 )
+            case "piarflow_unsubscribed":
+                await self._send(
+                    payload["user_id"],
+                    texts.notify_piarflow_unsubscribed(int(payload.get("penalty") or 0)),
+                )
             case "referral_joined":
                 await self._send(
                     payload["referrer_id"], texts.notify_referral_joined(payload["referee_name"])
@@ -127,9 +132,7 @@ class Notifier:
             await self._send(
                 admin_id,
                 text,
-                reply_markup=admin_keyboards.withdrawal_actions(
-                    wd.id, wd.status, has_gift=bool(wd.gift_id)
-                ),
+                reply_markup=admin_keyboards.withdrawal_actions(wd.id, wd.status),
             )
 
     async def _withdrawal_status(self, payload: dict[str, Any]) -> None:

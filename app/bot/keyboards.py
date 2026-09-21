@@ -10,7 +10,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from app.bot.utils import PAGE_SIZE, button, markup, pager, url_button
 from app.db.models import BoostProduct, Task, TaskKind, Withdrawal, WithdrawalStatus
 from app.op.base import Sponsor
-from app.op.manual import parse_channel_entry
+from app.services.channels import parse_channel_entry
 from app.services.gifts import GiftOffer
 from app.services.tasks import task_target
 
@@ -18,6 +18,10 @@ from app.services.tasks import task_target
 def device_button(url: str) -> InlineKeyboardButton:
     """Opens the device-verification Mini App (private chats only)."""
     return InlineKeyboardButton(text="🛡 Подтвердить устройство", web_app=WebAppInfo(url=url))
+
+
+def device_gate_keyboard(url: str) -> InlineKeyboardMarkup:
+    return markup([device_button(url)])
 
 
 def main_menu(is_admin: bool = False, device_url: str | None = None) -> InlineKeyboardMarkup:

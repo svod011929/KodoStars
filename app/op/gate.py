@@ -8,43 +8,18 @@ from app.config import Settings
 from app.db.models import ProviderState
 from app.db.txn import commit_before_io
 from app.op.base import OpAdapter, OpContext, OpResult
-from app.op.botohub import BotoHubAdapter
-from app.op.flyer import FlyerAdapter
-from app.op.manual import ManualAdapter
 from app.op.piarflow import PiarFlowAdapter
-from app.op.subgram import SubGramAdapter
-from app.op.tgrass import TGrassAdapter
-from app.op.trafsly import TrafslyAdapter
 
 log = structlog.get_logger("kodostars.op")
 
-CASCADE: tuple[str, ...] = (
-    "flyer",
-    "subgram",
-    "botohub",
-    "piarflow",
-    "tgrass",
-    "trafsly",
-    "manual",
-)
+CASCADE: tuple[str, ...] = ("piarflow",)
 
 PROVIDER_TITLES: dict[str, str] = {
-    "flyer": "Flyer",
-    "subgram": "SubGram",
-    "botohub": "BotoHub",
     "piarflow": "PiarFlow",
-    "tgrass": "TGrass",
-    "trafsly": "Trafsly",
-    "manual": "Свои каналы",
 }
 
 PROVIDER_DOCS: dict[str, str] = {
-    "flyer": "https://api.flyerhubs.com/",
-    "subgram": "https://subgram.ru",
-    "botohub": "https://botohub.me/integration",
     "piarflow": "https://piarflow.com/api-docs",
-    "tgrass": "https://tgrass.space/integration",
-    "trafsly": "https://trafsly.com/api-docs",
 }
 
 
@@ -65,8 +40,7 @@ class OpGate:
         effective = settings or self._settings
         ctx.settings = effective
         enabled = await enabled_providers(session, effective)
-        # Provider checks are network round trips (up to OP_TIMEOUT_SEC each): release
-        # the SQLite write lock before making them.
+        # Provider checks are network round trips: release the SQLite write lock first.
         await commit_before_io()
         for name in CASCADE:
             if name not in enabled:
@@ -91,46 +65,18 @@ class OpGate:
 
 
 def default_adapters(settings: Settings) -> list[OpAdapter]:
-    return [
-        FlyerAdapter(settings),
-        SubGramAdapter(settings),
-        BotoHubAdapter(settings),
-        PiarFlowAdapter(settings),
-        TGrassAdapter(settings),
-        TrafslyAdapter(settings),
-        ManualAdapter(settings),
-    ]
+    return [PiarFlowAdapter(settings)]
 
 
 def provider_configured(name: str, settings: Settings) -> bool:
-    """Whether the provider has credentials/channels and would do real work."""
-    if name == "flyer":
-        return bool(settings.flyer_api_key.strip())
-    if name == "subgram":
-        return bool(settings.subgram_api_key.strip())
-    if name == "botohub":
-        return bool(settings.botohub_api_key.strip())
+    """Whether the provider has credentials and would do real work."""
     if name == "piarflow":
         return bool(settings.piarflow_api_key.strip())
-    if name == "tgrass":
-        return bool(settings.tgrass_api_key.strip() or settings.tgrass_channels.strip())
-    if name == "trafsly":
-        return bool(settings.trafsly_api_key.strip())
-    if name == "manual":
-        return bool(settings.parse_channel_list(settings.manual_op_channels))
     return False
 
 
 async def enabled_providers(session: AsyncSession, settings: Settings) -> set[str]:
-    defaults = {
-        "flyer": settings.flyer_enabled,
-        "subgram": settings.subgram_enabled,
-        "botohub": settings.botohub_enabled,
-        "piarflow": settings.piarflow_enabled,
-        "tgrass": settings.tgrass_enabled,
-        "trafsly": settings.trafsly_enabled,
-        "manual": settings.manual_enabled,
-    }
+    defaults = {"piarflow": settings.piarflow_enabled}
     result = await session.execute(select(ProviderState))
     rows = {row.name: row.enabled for row in result.scalars().all()}
     enabled = set()

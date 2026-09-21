@@ -5,10 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import LedgerKind, Task, TaskKind, User, UserTask
-from app.op.manual import validate_channel_entry
 from app.services import events, ledger, referrals
 from app.services.antifraud import bump_activity, ensure_action_cooldown, ensure_not_banned
 from app.services.boosts import active_multiplier_bp, slugify
+from app.services.channels import validate_channel_entry
 from app.services.errors import AlreadyClaimed, EconomyError, NotFound, ValidationError
 from app.services.levels import XP_TASK, add_xp, apply_multipliers, info_for_xp
 from app.services.referrals import activated_invite_count

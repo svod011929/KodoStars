@@ -23,7 +23,6 @@ from app.db.models import (
     WithdrawalStatus,
 )
 from app.op.gate import CASCADE, PROVIDER_TITLES
-from app.op.manual import parse_channel_entry
 
 BACK = "‹ Назад"
 
@@ -34,10 +33,10 @@ def home() -> InlineKeyboardMarkup:
         [button("💸 Выводы", "admin:wd"), button("📣 Рассылка", "admin:bc")],
         [button("📋 Задания", "admin:tasks"), button("🚀 Бусты", "admin:boosts")],
         [button("🎟 Промокоды", "admin:promo:list:0"), button("💳 Платежи", "admin:pay:0")],
-        [button("⚙️ Настройки", "admin:set"), button("🔒 ОП-провайдеры", "admin:prov")],
-        [button("📢 Каналы ОП", "admin:ch"), button("🛡 Админы", "admin:adm")],
-        [button("🧾 Журнал", "admin:audit:0"), button("🕵️ Антифрод", "admin:fraud:0")],
-        [button("🗂 Данные", "admin:data"), button("🏠 В меню", "menu:home")],
+        [button("⚙️ Настройки", "admin:set"), button("🔒 PiarFlow", "admin:prov")],
+        [button("🛡 Админы", "admin:adm"), button("🧾 Журнал", "admin:audit:0")],
+        [button("🕵️ Антифрод", "admin:fraud:0"), button("🗂 Данные", "admin:data")],
+        [button("🏠 В меню", "menu:home")],
     )
 
 
@@ -187,11 +186,8 @@ def withdrawal_actions(wd_id: int, status: str, *, has_gift: bool = False) -> In
             [button("✅ Согласовать", f"admin:wd:ok:{wd_id}"), button("🔴 Отклонить", f"admin:wd:no:{wd_id}")]
         )
     elif status == WithdrawalStatus.APPROVED_MANUAL.value:
-        if has_gift:
-            rows.append([button("🎁 Отправить подарок", f"admin:wd:gift:{wd_id}")])
-            rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd_id}")])
-        else:
-            rows.append([button("💸 Подтвердить отправку", f"admin:wd:sent:{wd_id}")])
+        rows.append([button("⭐ Отправить через Fragment", f"admin:wd:fragment:{wd_id}")])
+        rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd_id}")])
         rows.append([button("🔴 Отклонить", f"admin:wd:no:{wd_id}")])
     rows.append([button("🔎 Открыть заявку", f"admin:wd:view:{wd_id}")])
     return markup(*rows)
@@ -204,11 +200,8 @@ def withdrawal_card(wd: Withdrawal) -> InlineKeyboardMarkup:
             [button("✅ Согласовать", f"admin:wd:ok:{wd.id}"), button("🔴 Отклонить", f"admin:wd:no:{wd.id}")]
         )
     elif wd.status == WithdrawalStatus.APPROVED_MANUAL.value:
-        if wd.gift_id:
-            rows.append([button("🎁 Отправить подарок", f"admin:wd:gift:{wd.id}")])
-            rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd.id}")])
-        else:
-            rows.append([button("💸 Подтвердить отправку", f"admin:wd:sent:{wd.id}")])
+        rows.append([button("⭐ Отправить через Fragment", f"admin:wd:fragment:{wd.id}")])
+        rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd.id}")])
         rows.append([button("🔴 Отклонить (вернуть Stars)", f"admin:wd:no:{wd.id}")])
     rows.append(
         [button("👤 Пользователь", f"admin:u:{wd.user_id}"), button("🔄 Обновить", f"admin:wd:view:{wd.id}")]
@@ -425,16 +418,6 @@ def providers(states: dict[str, bool]) -> InlineKeyboardMarkup:
         [button(f"{'🟢' if states.get(name) else '⚪'} {PROVIDER_TITLES[name]}", f"admin:prov:tg:{name}")]
         for name in CASCADE
     ]
-    rows.append([button("📢 Каналы ОП", "admin:ch"), button(BACK, "admin:home")])
-    return markup(*rows)
-
-
-def channels(items: Sequence[str]) -> InlineKeyboardMarkup:
-    rows = [
-        [button(f"🗑 {parse_channel_entry(channel).title}"[:60], f"admin:ch:del:{index}")]
-        for index, channel in enumerate(items)
-    ]
-    rows.append([button("➕ Добавить канал", "admin:ch:add"), button("🔄 Проверить", "admin:ch")])
     rows.append([button(BACK, "admin:home")])
     return markup(*rows)
 

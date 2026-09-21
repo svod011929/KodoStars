@@ -7,7 +7,7 @@ from app.services.errors import WithdrawalError
 
 
 async def _user(session, user_id: int = 50, credit: int = 80) -> User:
-    user = User(id=user_id, first_name="W")
+    user = User(id=user_id, first_name="W", username=f"w{user_id}")
     session.add(user)
     await session.flush()
     if credit:

@@ -17,7 +17,7 @@ from app.db.models import (
     UserBoost,
     Withdrawal,
 )
-from app.op.manual import parse_channel_entry
+from app.services.channels import parse_channel_entry
 from app.services.daily import DailyPreview
 from app.services.leaderboard import LeaderRow
 from app.services.levels import LevelInfo, format_multiplier, progress_bar
@@ -62,17 +62,38 @@ def home(
 
 
 def device_notice(for_withdraw: bool) -> str:
-    tail = " и недоступен вывод" if for_withdraw else ""
+    bits = ["не засчитываются рефералы"]
+    if for_withdraw:
+        bits.append("недоступен вывод")
+    bits.append("не выдаются задания ОП")
     return (
         "🛡 <b>Подтвердите устройство</b> — одна кнопка, две секунды. "
-        f"Без этого не засчитываются рефералы{tail}."
+        f"Без этого {', '.join(bits)}."
     )
 
 
 def device_twink_notice() -> str:
     return (
         "⚠️ На этом устройстве уже есть другой аккаунт: реферальные бонусы за этот аккаунт "
-        "не начисляются. Если это ошибка — напишите в поддержку."
+        "не начисляются, задания ОП не выдаются. Если это ошибка — напишите в поддержку."
+    )
+
+
+def op_need_device() -> str:
+    return (
+        "🛡 <b>Сначала подтвердите устройство</b>\n\n"
+        "Это нужно, чтобы отсеять мультиаккаунты до выдачи заданий спонсоров. "
+        "Нажмите кнопку ниже — займёт пару секунд."
+    )
+
+
+def op_twink_blocked(support: str) -> str:
+    contact = f"\n\nПоддержка: {h(support)}" if support else ""
+    return (
+        "⚠️ <b>Доступ ограничен</b>\n\n"
+        "С этого устройства уже зарегистрирован другой аккаунт, поэтому задания "
+        "обязательной подписки не выдаются."
+        f"{contact}"
     )
 
 
@@ -80,13 +101,21 @@ def notify_device_verified(twink: bool, first_time: bool) -> str:
     if twink:
         return (
             "🛡 Устройство проверено.\n\n"
-            "⚠️ На нём уже зарегистрирован другой аккаунт, поэтому реферальные бонусы за этот "
-            "аккаунт не начисляются. Ежедневка, задания и промокоды работают как обычно. "
-            "Если это ошибка — напишите в поддержку."
+            "⚠️ На нём уже зарегистрирован другой аккаунт, поэтому реферальные бонусы и задания "
+            "ОП за этот аккаунт недоступны. Если это ошибка — напишите в поддержку."
         )
     if first_time:
-        return "🛡 Устройство подтверждено ✅ Рефералы и вывод теперь доступны."
+        return "🛡 Устройство подтверждено ✅ Можно продолжать — дальше откроются задания спонсоров."
     return "🛡 Устройство подтверждено ✅"
+
+
+def notify_piarflow_unsubscribed(penalty: int) -> str:
+    if penalty > 0:
+        return (
+            f"⚠️ Вы отписались от спонсора. С баланса списано <b>{penalty} {STAR}</b>, "
+            "доступ к боту снова требует подписки."
+        )
+    return "⚠️ Вы отписались от спонсора. Доступ к боту снова требует подписки."
 
 
 def home_button():
