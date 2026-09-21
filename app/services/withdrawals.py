@@ -94,7 +94,7 @@ async def apply(
     if not (user.username or "").strip():
         raise WithdrawalError(
             "Для вывода нужен публичный @username в Telegram "
-            "(Fragment отправляет Stars по нику). Укажите username в настройках Telegram и зайдите в бота снова."
+            "(Fragment отправляет Stars по нику). Укажите username в Telegram и зайдите снова."
         )
     if settings.device_check_for_withdraw and not is_device_ok(user, settings):
         raise WithdrawalError(
