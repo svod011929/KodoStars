@@ -6,12 +6,14 @@ building a full ``Settings`` model, so the same constraints apply as for ``.env`
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import emoji as pe
 from app.config import RUNTIME_OVERRIDABLE, Settings
 from app.db.models import AppSetting
 from app.services.errors import ValidationError
@@ -36,6 +38,22 @@ def parse_value(key: str, raw: str) -> Any:
         if not text.lstrip("-").isdigit():
             raise ValidationError("Нужно целое число")
         return int(text)
+    if key == "currency_emoji_id":
+        match = re.search(r'emoji-id=["\']?(\d+)', text)
+        if match:
+            return match.group(1)
+        if text.isdigit():
+            return text
+        raise ValidationError(
+            "Пришлите numeric emoji-id или кусок "
+            '<tg-emoji emoji-id="…">…</tg-emoji>'
+        )
+    if key == "currency_emoji_fallback":
+        if not text:
+            raise ValidationError("Нужен unicode-символ для fallback (например ⭐)")
+        # One grapheme / short token — strip accidental tg-emoji wrappers' inner char.
+        inner = re.search(r"<tg-emoji[^>]*>([^<]+)</tg-emoji>", text)
+        return (inner.group(1) if inner else text)[:8]
     return text
 
 
@@ -71,7 +89,9 @@ class RuntimeSettingsStore:
 
     async def effective(self, session: AsyncSession) -> Settings:
         overrides = await self.overrides(session)
-        return self._base.with_overrides(overrides)
+        settings = self._base.with_overrides(overrides)
+        pe.apply_currency(settings.currency_emoji_id, settings.currency_emoji_fallback)
+        return settings
 
     async def set(self, session: AsyncSession, *, key: str, raw: str, admin_id: int) -> Any:
         value = parse_value(key, raw)
@@ -87,6 +107,8 @@ class RuntimeSettingsStore:
             row.updated_by = admin_id
         await session.flush()
         self._cache = candidate
+        settings = self._base.with_overrides(candidate)
+        pe.apply_currency(settings.currency_emoji_id, settings.currency_emoji_fallback)
         return value
 
     async def reset(self, session: AsyncSession, *, key: str) -> None:
@@ -98,6 +120,8 @@ class RuntimeSettingsStore:
             await session.flush()
         if self._cache is not None:
             self._cache.pop(key, None)
+        settings = self._base.with_overrides(self._cache or {})
+        pe.apply_currency(settings.currency_emoji_id, settings.currency_emoji_fallback)
 
     def default_value(self, key: str) -> Any:
         return getattr(self._base, key)

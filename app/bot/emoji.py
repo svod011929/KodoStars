@@ -9,6 +9,13 @@ from __future__ import annotations
 
 import re
 
+# Default premium glyph for internal Stars currency (overridable at runtime).
+DEFAULT_CURRENCY_ID = "5904462880941545555"
+DEFAULT_CURRENCY_FALLBACK = "⭐"
+
+_currency_id: str = DEFAULT_CURRENCY_ID
+_currency_fallback: str = DEFAULT_CURRENCY_FALLBACK
+
 # key → (custom_emoji_id, unicode fallback)
 CATALOG: dict[str, tuple[str, str]] = {
     "settings": ("5870982283724328568", "⚙️"),
@@ -61,7 +68,7 @@ CATALOG: dict[str, tuple[str, str]] = {
     "code": ("5940433880585605708", "🔨"),
     "loading": ("5345906554510012647", "🔄"),
     # UI aliases (same ids, alternate unicode that appears in texts/buttons)
-    "star": ("5904462880941545555", "⭐"),
+    "star": (DEFAULT_CURRENCY_ID, DEFAULT_CURRENCY_FALLBACK),
     "money": ("5904462880941545555", "💰"),
     "gem": ("5904462880941545555", "💎"),
     "shield": ("6037249452824072506", "🛡"),
@@ -137,22 +144,49 @@ for _uni, _key in _UNICODE_TO_KEY:
     _UNICODE_UNIQUE.append((_uni, _key))
 
 
+def apply_currency(emoji_id: str, fallback: str = DEFAULT_CURRENCY_FALLBACK) -> None:
+    """Swap the live currency glyph used in messages and ``icon="star"`` buttons."""
+    global _currency_id, _currency_fallback
+    eid = (emoji_id or "").strip() or DEFAULT_CURRENCY_ID
+    fb = (fallback or "").strip() or DEFAULT_CURRENCY_FALLBACK
+    _currency_id = eid
+    _currency_fallback = fb
+
+
+def currency_id() -> str:
+    return _currency_id
+
+
+def currency_fallback() -> str:
+    return _currency_fallback
+
+
+def currency() -> str:
+    return f'<tg-emoji emoji-id="{_currency_id}">{_currency_fallback}</tg-emoji>'
+
+
 def id_of(key: str) -> str:
+    if key == "star":
+        return _currency_id
     return CATALOG[key][0]
 
 
 def fallback_of(key: str) -> str:
+    if key == "star":
+        return _currency_fallback
     return CATALOG[key][1]
 
 
 def html(key: str) -> str:
     """Premium emoji markup for message HTML (parse_mode=HTML)."""
+    if key == "star":
+        return currency()
     eid, fb = CATALOG[key]
     return f'<tg-emoji emoji-id="{eid}">{fb}</tg-emoji>'
 
 
 def star() -> str:
-    return html("star")
+    return currency()
 
 
 def premiumize(text: str) -> str:
@@ -160,7 +194,16 @@ def premiumize(text: str) -> str:
     if not text or "<tg-emoji" in text:
         return text
     out = text
+    # Currency glyphs → live override (placeholder avoids re-matching fallback inside the tag).
+    currency_glyphs = {g for g in (_currency_fallback, DEFAULT_CURRENCY_FALLBACK) if g}
+    if currency_glyphs:
+        marker = "\0CURRENCY\0"
+        for glyph in sorted(currency_glyphs, key=len, reverse=True):
+            out = out.replace(glyph, marker)
+        out = out.replace(marker, currency())
     for uni, key in _UNICODE_UNIQUE:
+        if key == "star" or uni in currency_glyphs:
+            continue
         if uni in out:
             out = out.replace(uni, html(key))
     return out
@@ -169,6 +212,9 @@ def premiumize(text: str) -> str:
 def split_icon(text: str) -> tuple[str, str | None]:
     """Strip a leading known emoji from button label → (plain_text, icon_id)."""
     raw = text or ""
+    if _currency_fallback and raw.startswith(_currency_fallback):
+        rest = raw[len(_currency_fallback) :].lstrip(" \u00a0")
+        return rest or raw, _currency_id
     for uni, key in _UNICODE_UNIQUE:
         if raw.startswith(uni):
             rest = raw[len(uni) :].lstrip(" \u00a0")

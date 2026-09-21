@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from app.bot import emoji as pe
 from app.bot.utils import fmt_ago, fmt_dt, fmt_signed, h, mention
 from app.config import RUNTIME_OVERRIDABLE, RUNTIME_SETTING_LABELS, Settings
 from app.db.models import (
@@ -32,7 +33,18 @@ from app.services.boosts import describe as describe_boost
 from app.services.stats import Dashboard
 from app.services.tasks import task_target
 
-STAR = "⭐"
+
+class _CurrencyGlyph:
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        return pe.currency()
+
+    def __format__(self, spec: str) -> str:
+        return format(str(self), spec)
+
+
+STAR = _CurrencyGlyph()
 
 
 def home(version: str, pending: int, running_broadcast: bool, maintenance: bool) -> str:
@@ -691,6 +703,10 @@ def settings_home(effective: Settings, overrides: dict[str, Any]) -> str:
 def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> str:
     kind = RUNTIME_OVERRIDABLE[key]
     hint = "вкл / выкл" if kind is bool else "целое число" if kind is int else "текст"
+    if key == "currency_emoji_id":
+        hint = "numeric id или <tg-emoji emoji-id=\"…\">…</tg-emoji>"
+    elif key == "currency_emoji_fallback":
+        hint = "один unicode-символ, например ⭐"
     return (
         f"⚙️ <b>{h(RUNTIME_SETTING_LABELS.get(key, key))}</b>\n"
         f"Ключ: <code>{key}</code>\n\n"
