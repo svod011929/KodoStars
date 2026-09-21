@@ -31,6 +31,9 @@ Telegram-бот на **Python 3.12 / aiogram 3**: реферальная эко�
 до выдачи заданий, вебхук отписок со штрафом, реферальный бонус только после ≥N оплаченных
 подписок PiarFlow. Выплата Stars пользователям — через **Fragment** (mnemonic + cookies).
 UI использует Telegram **premium emoji** (`<tg-emoji>` в сообщениях, `icon_custom_emoji_id` на кнопках).
+Эмодзи **валюты** (баланс, награды) задаётся через `CURRENCY_EMOJI_ID` / `CURRENCY_EMOJI_FALLBACK`
+и меняется в рантайме: **Админка → Настройки** (можно вставить numeric id или кусок
+`<tg-emoji emoji-id="…">…</tg-emoji>`).
 
 Интерфейс — русский. Выплаты пользователям — **только Telegram Stars**. CryptoBot нет.
 
