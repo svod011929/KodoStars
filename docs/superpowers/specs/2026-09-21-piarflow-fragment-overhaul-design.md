@@ -26,9 +26,10 @@
 
 ### 4. Выплаты через Fragment
 - Env (только сервер, не в git): `FRAGMENT_WALLET_MNEMONIC`, `FRAGMENT_COOKIES`.
+- Опционально `FRAGMENT_TONAPI_KEY` (tonconsole) — без него используется публичный Toncenter.
 - Вывод: сумма (каталог подарков как пресеты star_count) → заявка → админ «Отправить через Fragment».
 - Требуется `@username` у получателя (Fragment принимает username).
-- Библиотека: `fragment-api-lib` (cookies + mnemonic), вызов в `asyncio.to_thread`.
+- Библиотека: `fragment-api-py` (cookies + mnemonic, подпись локально).
 
 ### 5. Секреты
 - Реальные mnemonic/cookies **не коммитятся**. В `.env.example` — плейсхолдеры.
