@@ -25,6 +25,7 @@ def _web_settings(**overrides) -> Settings:
 
 
 async def _user(session, user_id: int, **kwargs) -> User:
+    kwargs.setdefault("username", f"user{user_id}")
     user = User(id=user_id, first_name=f"U{user_id}", **kwargs)
     session.add(user)
     await session.flush()

@@ -101,6 +101,28 @@ def withdraw_blocked_by_twink(user: User, settings: Settings) -> bool:
     return settings.twink_block_withdraw and user.is_twink
 
 
+def op_access_block_reason(user: User, settings: Settings) -> str | None:
+    """Why OP/PiarFlow must not run for this user, or ``None`` when allowed.
+
+    Device verification and twink checks happen *before* any PiarFlow API call
+    so multi-accounts never receive sponsor tasks (traffic quality).
+    """
+    if not settings.device_check_for_op:
+        if settings.twink_block_op and user.is_twink:
+            return "twink"
+        return None
+    if not settings.device_check_active:
+        # Mini App URL missing → cannot gate; do not soft-fail OP for everyone.
+        if settings.twink_block_op and user.is_twink:
+            return "twink"
+        return None
+    if not is_device_ok(user, settings):
+        return "device"
+    if settings.twink_block_op and user.is_twink:
+        return "twink"
+    return None
+
+
 async def register_device(
     session: AsyncSession,
     *,

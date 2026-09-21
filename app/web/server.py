@@ -2,10 +2,11 @@
 
 Routes:
 
-* ``GET /``            — landing page with a link to the bot
-* ``GET /health``      — liveness probe (used by hosting panels)
-* ``GET /verify``      — the Mini App page (device verification)
-* ``POST /api/device`` — verification callback: signed ``initData`` + fingerprint
+* ``GET /``                     — landing page with a link to the bot
+* ``GET /health``               — liveness probe (used by hosting panels)
+* ``GET /verify``               — the Mini App page (device verification)
+* ``POST /api/device``          — verification callback: signed ``initData`` + fingerprint
+* ``POST /api/piarflow/webhook`` — PiarFlow unsubscribe webhook
 
 The server listens on ``SERVER_PORT`` (RubyHost injects it) and is reachable through
 the panel's HTTPS address configured as ``WEB_PUBLIC_URL``.
@@ -29,6 +30,7 @@ from app import __version__
 from app.config import Settings
 from app.db.models import User
 from app.services import devices, events, referrals
+from app.services import piarflow_webhook
 from app.services import tasks as task_service
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.errors import EconomyError
@@ -112,6 +114,7 @@ class WebServer:
         app.router.add_get("/health", self.health)
         app.router.add_get("/verify", self.verify_page)
         app.router.add_post("/api/device", self.api_device)
+        app.router.add_post("/api/piarflow/webhook", self.piarflow_webhook)
         return app
 
     async def start(self, host: str, port: int) -> None:
@@ -204,3 +207,41 @@ class WebServer:
             ip=ip,
         )
         return web.json_response({"ok": True, "twink": verdict.twink, "first_time": verdict.first_time})
+
+    async def piarflow_webhook(self, request: web.Request) -> web.Response:
+        """PiarFlow unsubscribe callback — configure URL in PiarFlow traffic bot settings."""
+        ip = client_ip(request)
+        if not self._limiter.allow(f"pf:{ip or 'unknown'}"):
+            return web.json_response({"ok": False, "error": "rate_limited"}, status=429)
+        try:
+            payload: dict[str, Any] = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "invalid_json"}, status=400)
+        if not isinstance(payload, dict):
+            return web.json_response({"ok": False, "error": "invalid_json"}, status=400)
+
+        if payload.get("test"):
+            return web.json_response({"ok": True})
+
+        pending: list[DomainEvent] = []
+        async with self._factory() as session:
+            settings = await self._store.effective(session)
+            result = await piarflow_webhook.handle_unsubscribe(
+                session, payload=payload, settings=settings
+            )
+            await session.commit()
+            pending = events.drain(session)
+        if pending and self._events_sink is not None:
+            try:
+                await self._events_sink(pending)
+            except Exception:
+                log.warning("piarflow_webhook_events_failed", exc_info=True)
+        log.info(
+            "piarflow_webhook",
+            processed=result.processed,
+            duplicate=result.duplicate,
+            penalty=result.penalty,
+            user_id=result.user_id,
+            ip=ip,
+        )
+        return web.json_response({"ok": True})

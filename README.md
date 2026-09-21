@@ -25,7 +25,7 @@
 Telegram-бот на **Python 3.12 / aiogram 3**: реферальная экономика на внутренних Stars, ежедневки,
 задания, промокоды, бусты за **Telegram Stars (XTR)**, очередь выводов с холдом средств и
 полноценная **админ-панель внутри Telegram**. Монетизация трафика — каскад обязательной подписки (ОП):
-**Flyer → SubGram → BotoHub → PiarFlow → TGrass → Trafsly → свои каналы**.
+**только PiarFlow** (проверка устройства/твинков до выдачи заданий; вебхук отписок; выплата Stars через Fragment).
 
 Интерфейс — русский. Выплаты пользователям — **только Telegram Stars**. CryptoBot нет.
 
@@ -128,8 +128,9 @@ long polling. С плейсхолдер-токеном процесс тоже �
 | Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, `NOTIFY_REFERRER`, ежедневка, `SIGNUP_BONUS`, `CLAIM_COOLDOWN_SECONDS` |
 | Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS` |
 | Операционные | `MAINTENANCE_MODE`, `MAINTENANCE_TEXT`, `BROADCAST_RATE_PER_SEC`, `THROTTLE_SECONDS` |
-| Flyer / SubGram / BotoHub / PiarFlow / TGrass / Trafsly | `*_ENABLED`, `*_API_KEY`, `*_API_URL`, `FLYER_TASKS_LIMIT`, `BOTOHUB_MAX_OP`, `PIARFLOW_MAX_SPONSORS`, `TGRASS_OFFERS_LIMIT`, `TGRASS_CHANNELS`, `TRAFSLY_MAX_SPONSORS` |
-| Manual | `MANUAL_ENABLED`, `MANUAL_OP_CHANNELS` (`@channel` или `-100…`) |
+| PiarFlow | `PIARFLOW_ENABLED`, `PIARFLOW_API_KEY`, `PIARFLOW_API_URL`, `PIARFLOW_MAX_SPONSORS`, `PIARFLOW_UNSUB_PENALTY` |
+| Fragment | `FRAGMENT_WALLET_MNEMONIC`, `FRAGMENT_COOKIES`, `FRAGMENT_TONAPI_KEY`, `FRAGMENT_WALLET_VERSION` |
+| Антитвинк / ОП | `DEVICE_CHECK_FOR_OP`, `TWINK_BLOCK_OP` |
 | Логи | `LOG_LEVEL`, `LOG_JSON` |
 
 Все параметры экономики, лимиты вывода, каналы manual-ОП, контакт поддержки и режим обслуживания
@@ -188,10 +189,10 @@ long polling. С плейсхолдер-токеном процесс тоже �
 карточке) или мгновенно отключает множитель, пользователь получает уведомление.
 Команды `/paysupport` и `/terms` отвечают требованиям Telegram к ботам, принимающим Stars.
 
-## Каскад ОП
+## ОП (PiarFlow)
 
 Провайдер без ключа не блокирует пользователей (skip), ошибка API — fail-open. Порядок фиксирован:
-Flyer → SubGram → BotoHub → PiarFlow → TGrass → Trafsly → свои каналы. Админ может выключить любого
+PiarFlow. Админ может выключить любого
 провайдера в рантайме (таблица `provider_states`) и управлять списком своих каналов.
 
 Адаптеры реализованы по официальной документации сервисов, контракты закреплены тестами

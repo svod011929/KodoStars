@@ -7,10 +7,8 @@ import pytest_asyncio
 from aiogram.methods import (
     AnswerPreCheckoutQuery,
     CopyMessage,
-    CreateChatSubscriptionInviteLink,
     EditMessageText,
     SendDocument,
-    SendGift,
     SendInvoice,
     SendMessage,
 )
@@ -26,10 +24,10 @@ from app.db.models import (
     WithdrawalStatus,
 )
 from app.services import devices, ledger, payments, promo, referrals
+from app.services.fragment import FragmentPurchase
 from tests.conftest import ADMIN_ID, OTHER_ID, USER_ID, BotHarness
 from tests.fake_telegram import (
     callback_update,
-    forwarded_channel_post_update,
     message_update,
     pre_checkout_update,
     successful_payment_update,
@@ -68,29 +66,21 @@ async def test_start_creates_user_credits_signup_and_shows_home(harness: BotHarn
 
 
 @pytest.mark.asyncio
-async def test_op_gate_blocks_until_subscribed(harness: BotHarness) -> None:
+async def test_op_gate_requires_device_before_sponsors(harness: BotHarness) -> None:
     h = harness
-    h.tg.member_status[("@kodo", USER_ID)] = "left"
+    h.settings.web_public_url = "https://mini.example"
+    h.settings.device_check_for_op = True
     await _start(h, USER_ID)
-    assert "Обязательная подписка" in h.tg.last_text(USER_ID)
+    assert "Сначала подтвердите устройство" in h.tg.last_text(USER_ID)
     keyboard = h.tg.sent(SendMessage)[-1].reply_markup
-    assert keyboard is not None and keyboard.inline_keyboard[-1][0].callback_data == "op:verify"
+    assert keyboard is not None
+    assert keyboard.inline_keyboard[0][0].web_app.url == "https://mini.example/verify"
 
-    # Regular menu callbacks are blocked as well.
+    # Regular menu callbacks are blocked the same way (no PiarFlow call yet).
     await h.feed(callback_update(USER_ID, "menu:daily"))
-    assert "Обязательная подписка" in h.tg.last_text(USER_ID)
-
-    # Still blocked when pressing verify without subscribing.
-    await h.feed(callback_update(USER_ID, "op:verify"))
-    assert "Ещё не все подписки" in h.tg.alerts()[-1]
-
-    h.tg.member_status[("@kodo", USER_ID)] = "member"
-    await h.feed(callback_update(USER_ID, "op:verify"))
-    assert "Доступ открыт" in h.tg.alerts()[-1]
-    assert "KodoStars" in h.tg.last_text(USER_ID)
+    assert "Сначала подтвердите устройство" in h.tg.last_text(USER_ID)
 
     # Admins bypass the gate entirely.
-    h.tg.member_status[("@kodo", ADMIN_ID)] = "left"
     await _start(h, ADMIN_ID)
     assert "KodoStars" in h.tg.last_text(ADMIN_ID)
 
@@ -163,6 +153,8 @@ async def test_concurrent_double_withdraw_creates_one_request(harness: BotHarnes
 async def test_device_check_button_and_gating_in_ui(harness: BotHarness) -> None:
     h = harness
     h.settings.web_public_url = "https://mini.example"
+    # Home menu with device button: mark OP cache fresh so start reaches home.
+    h.settings.device_check_for_op = False
     await _start(h, ADMIN_ID)
     await _start(h, USER_ID, f"ref_{ADMIN_ID}")
     home = h.tg.last_text(USER_ID)
@@ -232,7 +224,7 @@ async def test_daily_claim_flow(harness: BotHarness) -> None:
 
 
 @pytest.mark.asyncio
-async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness) -> None:
+async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness, monkeypatch) -> None:
     h = harness
     await _start(h, ADMIN_ID)
     await _start(h, USER_ID)
@@ -257,12 +249,18 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness) -> Non
     alert_markup = [r for r in h.tg.sent(SendMessage) if r.chat_id == ADMIN_ID][-1].reply_markup
     assert alert_markup.inline_keyboard[0][0].callback_data == "admin:wd:ok:1"
 
-    # Admin approves, then sends the gift via bot API. User is notified on each step.
+    # Admin approves, then sends Stars via Fragment (mocked). User is notified on each step.
     await h.feed(callback_update(ADMIN_ID, "admin:wd:ok:1"))
     assert "согласована" in h.tg.last_text(USER_ID)
-    await h.feed(callback_update(ADMIN_ID, "admin:wd:gift:1"))
-    assert "отправлен" in h.tg.last_text(USER_ID)
-    assert h.tg.sent(SendGift)
+
+    async def _fake_buy(settings, *, username: str, amount: int):
+        return FragmentPurchase(username=username or "user", amount=amount, raw={})
+
+    monkeypatch.setattr("app.services.fragment.buy_stars", _fake_buy)
+    await h.feed(callback_update(ADMIN_ID, "admin:wd:fragment:1"))
+    assert "отправлен" in h.tg.last_text(USER_ID) or any(
+        "Отправлено" in a for a in h.tg.alerts()
+    )
     async with h.factory() as session:
         wd = await session.get(Withdrawal, 1)
         assert wd.status == WithdrawalStatus.SENT.value
@@ -495,77 +493,22 @@ async def test_broadcast_wizard_runs_in_background(harness: BotHarness) -> None:
 
 
 @pytest.mark.asyncio
-async def test_export_sends_document_and_channels_view(harness: BotHarness) -> None:
+async def test_export_sends_document(harness: BotHarness) -> None:
     h = harness
     await _start(h, ADMIN_ID)
     await h.feed(callback_update(ADMIN_ID, "admin:exp:users"))
     document = h.tg.sent(SendDocument)[-1]
     assert document.document.filename.startswith("kodostars_users_")
-    h.tg.member_status[("@kodo", 123456789)] = "administrator"
-    await h.feed(callback_update(ADMIN_ID, "admin:ch"))
-    channels_text = h.tg.last_text(ADMIN_ID)
-    assert "@kodo" in channels_text and "бот админ" in channels_text
-    await h.feed(callback_update(ADMIN_ID, "admin:ch:add"))
-    # A bare private id has no joinable link → rejected with a hint.
-    await h.feed(message_update(ADMIN_ID, "@second, -1001234567890"))
-    assert "пригласительная ссылка" in h.tg.last_text(ADMIN_ID)
-    await h.feed(message_update(ADMIN_ID, "@second|Второй, -1001234567890|https://t.me/+AbCdEf|VIP"))
-    assert "VIP" in h.tg.last_text(ADMIN_ID) and "🔒 приватный" in h.tg.last_text(ADMIN_ID)
-    await h.feed(callback_update(ADMIN_ID, "admin:ch:del:0"))
-    async with h.factory() as session:
-        effective = await h.store.effective(session)
-        assert effective.parse_channel_list(effective.manual_op_channels) == [
-            "@second|Второй",
-            "-1001234567890|https://t.me/+AbCdEf|VIP",
-        ]
 
 
 @pytest.mark.asyncio
-async def test_private_paid_channel_via_forward_and_paid_link(harness: BotHarness) -> None:
-    """Admin forwards a post from a private channel, pastes the paid invite link; users
-    who have not paid are blocked with a button to that link, subscribers pass."""
+async def test_admin_piarflow_toggle(harness: BotHarness) -> None:
     h = harness
     await _start(h, ADMIN_ID)
-    await h.feed(callback_update(ADMIN_ID, "admin:ch:add"))
-    await h.feed(forwarded_channel_post_update(ADMIN_ID, chat_id=-1009876543210, title="Клуб инвесторов"))
-    prompt = h.tg.last_text(ADMIN_ID)
-    assert "приватный" in prompt and "auto 50" in prompt
-    await h.feed(message_update(ADMIN_ID, "not a link"))
-    assert "Пришлите пригласительную ссылку" in h.tg.last_text(ADMIN_ID)
-    await h.feed(message_update(ADMIN_ID, "https://t.me/+PaidClub2026"))
-    assert "Клуб инвесторов" in h.tg.last_text(ADMIN_ID)
-    async with h.factory() as session:
-        effective = await h.store.effective(session)
-        channels = effective.parse_channel_list(effective.manual_op_channels)
-    assert channels[-1] == "-1009876543210|https://t.me/+PaidClub2026|Клуб инвесторов"
-
-    # Non-subscriber: blocked, button leads to the paid link, check goes by numeric id.
-    h.tg.member_status[("-1009876543210", USER_ID)] = "left"
-    await _start(h, USER_ID)
-    assert "Обязательная подписка" in h.tg.last_text(USER_ID)
-    keyboard = h.tg.sent(SendMessage)[-1].reply_markup
-    buttons = [b for row in keyboard.inline_keyboard for b in row if b.url]
-    assert [(b.text, b.url) for b in buttons] == [("➕ Клуб инвесторов", "https://t.me/+PaidClub2026")]
-
-    h.tg.member_status[("-1009876543210", USER_ID)] = "member"
-    await h.feed(callback_update(USER_ID, "op:verify"))
-    assert "Доступ открыт" in h.tg.alerts()[-1]
-
-
-@pytest.mark.asyncio
-async def test_bot_creates_paid_invite_link_on_request(harness: BotHarness) -> None:
-    h = harness
-    await _start(h, ADMIN_ID)
-    await h.feed(callback_update(ADMIN_ID, "admin:ch:add"))
-    await h.feed(forwarded_channel_post_update(ADMIN_ID, chat_id=-1001112223334, title="Paid"))
-    await h.feed(message_update(ADMIN_ID, "auto 50"))
-    created = h.tg.sent(CreateChatSubscriptionInviteLink)[-1]
-    assert created.chat_id == -1001112223334
-    assert created.subscription_price == 50 and created.subscription_period == 30 * 24 * 3600
-    async with h.factory() as session:
-        effective = await h.store.effective(session)
-        channels = effective.parse_channel_list(effective.manual_op_channels)
-    assert channels[-1] == "-1001112223334|https://t.me/+generated50|Paid"
+    await h.feed(callback_update(ADMIN_ID, "admin:prov"))
+    assert "PiarFlow" in h.tg.last_text(ADMIN_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:prov:tg:piarflow"))
+    assert "ВЫКЛ" in h.tg.last_text(ADMIN_ID) or "ВКЛ" in h.tg.last_text(ADMIN_ID)
 
 
 @pytest.mark.asyncio

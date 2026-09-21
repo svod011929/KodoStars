@@ -26,7 +26,6 @@ from app.db.models import (
     Withdrawal,
 )
 from app.op.gate import CASCADE, PROVIDER_DOCS, PROVIDER_TITLES
-from app.op.manual import parse_channel_entry
 from app.services.app_settings import format_value
 from app.services.audit import label as action_label
 from app.services.boosts import describe as describe_boost
@@ -704,10 +703,11 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
 
 def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
     lines = [
-        "🔒 <b>ОП-провайдеры</b>",
+        "🔒 <b>PiarFlow</b>",
         "",
-        "Каскад: " + " → ".join(PROVIDER_TITLES[name] for name in CASCADE),
-        "Выключенный провайдер пропускается, ошибки API — fail-open (не блокируют пользователей).",
+        "Единственный провайдер обязательной подписки. "
+        "Ошибки API — fail-open (не блокируют пользователей).",
+        "Вебхук отписок: <code>/api/piarflow/webhook</code> на вашем HTTPS.",
         "",
     ]
     for name in CASCADE:
@@ -718,67 +718,6 @@ def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
         label = f'<a href="{docs}">{title}</a>' if docs else title
         lines.append(f"{state} · <b>{label}</b> · {conf}")
     return "\n".join(lines)
-
-
-def channels_home(channels: Sequence[str], checks: dict[str, str]) -> str:
-    lines = [
-        "📢 <b>Каналы обязательной подписки (manual)</b>",
-        "",
-        "Бот должен быть администратором канала, иначе проверка подписки невозможна "
-        "(такой канал пропускается — fail-open). Для приватных и платных каналов кнопка ведёт "
-        "на пригласительную ссылку, проверка — по ID.",
-        "",
-    ]
-    if not channels:
-        lines.append("Каналов нет. Добавьте первый.")
-    for channel in channels:
-        entry = parse_channel_entry(channel)
-        kind = "🔒 приватный" if entry.is_private else "🌐 публичный"
-        link = (
-            f'<a href="{h(entry.url)}">ссылка</a>' if entry.has_join_link else "⚠️ нет пригласительной ссылки"
-        )
-        lines.append(
-            f"• <b>{h(entry.title)}</b> · {kind} · <code>{h(str(entry.chat))}</code> · {link}\n"
-            f"   {checks.get(channel, '')}"
-        )
-    return "\n".join(lines)
-
-
-def channel_add_prompt() -> str:
-    return (
-        "Добавить канал можно двумя способами:\n\n"
-        "1️⃣ <b>Перешлите любой пост из канала</b> — бот сам определит ID и название, "
-        "а для приватного канала попросит пригласительную ссылку.\n\n"
-        "2️⃣ Отправьте текстом (несколько — через запятую):\n"
-        "<code>@username</code>\n"
-        "<code>@username|Название</code>\n"
-        "<code>-1001234567890|https://t.me/+ссылка|Название</code> — приватный или платный канал\n\n"
-        "Проверка подписки идёт по первому полю (бот должен быть админом канала), "
-        "кнопка пользователю — по ссылке. Для платного канала укажите платную ссылку с ценой в Stars."
-    )
-
-
-def channel_link_prompt(title: str, chat_id: int, paid_hint: bool = True) -> str:
-    paid = (
-        "\n\nДля <b>платного</b> канала пришлите платную ссылку (создаётся в настройках канала, "
-        "цена в Stars) — иначе пользователи попадут в канал бесплатно."
-        if paid_hint
-        else ""
-    )
-    return (
-        f"Канал «{h(title)}» (<code>{chat_id}</code>) приватный.\n"
-        "Пришлите пригласительную ссылку <code>https://t.me/+…</code>.\n\n"
-        "Или команды:\n"
-        "<code>auto</code> — бот создаст обычную бесплатную ссылку\n"
-        "<code>auto 50</code> — бот создаст платную ссылку за 50 ⭐/мес\n"
-        "(нужно право «Приглашать пользователей»)."
-        f"{paid}"
-    )
-
-
-def channel_added(entry_raw: str) -> str:
-    entry = parse_channel_entry(entry_raw)
-    return f"✅ Канал «{h(entry.title)}» добавлен."
 
 
 def admins_home(owners: Sequence[int], admins: Sequence[Admin], names: dict[int, str]) -> str:

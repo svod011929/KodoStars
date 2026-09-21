@@ -1,5 +1,4 @@
 from aiogram import F, Router
-from aiogram.exceptions import TelegramAPIError
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
@@ -9,9 +8,11 @@ from app.bot.admin import keyboards as kb
 from app.bot.admin import texts
 from app.bot.admin.states import AdminFSM
 from app.bot.utils import PAGE_SIZE, parse_id, safe_answer, safe_edit
+from app.config import Settings
 from app.db.models import OPEN_WITHDRAWAL_STATUSES, User, Withdrawal, WithdrawalStatus
-from app.services import antifraud, audit, devices, ledger, referrals, withdrawals
+from app.services import antifraud, audit, devices, fragment, ledger, referrals, withdrawals
 from app.services.errors import WithdrawalError
+from app.services.fragment import FragmentError
 
 router = Router(name="admin.withdrawals")
 
@@ -174,29 +175,34 @@ async def wd_sent(call: CallbackQuery, session: AsyncSession) -> None:
     await safe_edit(call.message, text, markup)
 
 
-@router.callback_query(F.data.regexp(r"^admin:wd:gift:(\d+)$"))
-async def wd_send_gift(call: CallbackQuery, session: AsyncSession) -> None:
+@router.callback_query(F.data.regexp(r"^admin:wd:fragment:(\d+)$"))
+async def wd_send_fragment(
+    call: CallbackQuery, session: AsyncSession, settings: Settings
+) -> None:
     wd = await session.get(Withdrawal, parse_id(call.data))
     if wd is None:
         await safe_answer(call, "Заявка не найдена", alert=True)
         return
-    if not wd.gift_id:
-        await safe_answer(call, "В заявке нет подарка", alert=True)
-        return
     if wd.status != WithdrawalStatus.APPROVED_MANUAL.value:
         await safe_answer(call, "Сначала согласуйте заявку", alert=True)
         return
+    user = await session.get(User, wd.user_id)
+    if user is None:
+        await safe_answer(call, "Пользователь не найден", alert=True)
+        return
+    await safe_answer(call, "Отправляю Stars через Fragment…")
     try:
-        await call.bot.send_gift(gift_id=wd.gift_id, user_id=wd.user_id)
-    except TelegramAPIError as exc:
-        await safe_answer(call, f"Не удалось отправить подарок: {exc}", alert=True)
+        purchase = await fragment.buy_stars(settings, username=user.username, amount=wd.amount)
+    except FragmentError as exc:
+        await safe_answer(call, exc.message, alert=True)
         return
     try:
         await withdrawals.confirm_sent(session, withdrawal=wd, admin_id=call.from_user.id)
     except WithdrawalError as exc:
         await safe_answer(
             call,
-            f"Подарок отправлен, но статус не обновлён: {exc.message}. Отметьте вручную.",
+            f"Stars отправлены (@{purchase.username}), но статус не обновлён: {exc.message}. "
+            "Отметьте вручную.",
             alert=True,
         )
         return
@@ -208,8 +214,10 @@ async def wd_send_gift(call: CallbackQuery, session: AsyncSession) -> None:
         target_id=wd.id,
         amount=wd.amount,
         gift_id=wd.gift_id,
-        via="bot",
+        via="fragment",
+        fragment_username=purchase.username,
     )
     text, markup = await render_card(session, wd)
-    await safe_answer(call, "Подарок отправлен")
     await safe_edit(call.message, text, markup)
+    await safe_answer(call, f"Отправлено @{purchase.username} · {purchase.amount}⭐")
+

@@ -37,6 +37,7 @@ class LedgerKind(StrEnum):
     ADMIN_ADJUST = "admin_adjust"
     PROMO = "promo"
     REFUND_REVOKE = "refund_revoke"
+    UNSUB_PENALTY = "unsub_penalty"
 
 
 LEDGER_KIND_LABELS: dict[str, str] = {
@@ -52,6 +53,7 @@ LEDGER_KIND_LABELS: dict[str, str] = {
     LedgerKind.ADMIN_ADJUST.value: "Корректировка админа",
     LedgerKind.PROMO.value: "Промокод",
     LedgerKind.REFUND_REVOKE.value: "Возврат платежа",
+    LedgerKind.UNSUB_PENALTY.value: "Штраф за отписку",
 }
 
 
@@ -340,6 +342,21 @@ class FraudEvent(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     kind: Mapped[str] = mapped_column(String(32))
     detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PiarflowUnsub(Base):
+    """Idempotent log of PiarFlow unsubscribe webhooks (one row per user+offer)."""
+
+    __tablename__ = "piarflow_unsubs"
+    __table_args__ = (UniqueConstraint("tg_user_id", "offer_link", name="uq_piarflow_unsub"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tg_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    offer_link: Mapped[str] = mapped_column(String(512))
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    bot_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    penalty: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

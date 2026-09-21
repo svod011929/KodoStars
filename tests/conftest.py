@@ -101,13 +101,7 @@ async def harness() -> AsyncIterator[BotHarness]:
         signup_bonus=5,
         claim_cooldown_seconds=0,
         throttle_seconds=0,
-        manual_op_channels="@kodo",
-        flyer_enabled=False,
-        subgram_enabled=False,
-        botohub_enabled=False,
         piarflow_enabled=False,
-        tgrass_enabled=False,
-        trafsly_enabled=False,
         withdraw_cooldown_hours=0,
     )
     engine = create_engine(settings)

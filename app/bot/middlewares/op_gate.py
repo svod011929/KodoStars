@@ -8,10 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
 from app.bot.middlewares.events import unwrap_event
+from app.bot.render import device_url_for
 from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext
 from app.op.gate import OpGate
+from app.services.devices import op_access_block_reason
 
 _SKIP_PREFIXES = (
     "op:",
@@ -51,6 +53,13 @@ class OpGateMiddleware(BaseMiddleware):
             return await _reply(inner, texts.banned(user.ban_reason or "бан", settings.support_contact))
         if _op_fresh(user, settings.op_cache_sec):
             return await handler(event, data)
+
+        block = op_access_block_reason(user, settings)
+        if block is not None:
+            await _reply_device_or_twink(inner, user, settings, block)
+            if isinstance(inner, CallbackQuery):
+                await inner.answer()
+            return None
 
         ctx = OpContext(
             user_id=user.id,
@@ -103,6 +112,16 @@ def _chat_id(event: TelegramObject, fallback: int) -> int:
     if isinstance(event, CallbackQuery) and event.message and event.message.chat:
         return event.message.chat.id
     return fallback
+
+
+async def _reply_device_or_twink(
+    event: TelegramObject, user: User, settings: Settings, reason: str
+) -> None:
+    if reason == "device":
+        url = device_url_for(user, settings) or settings.web_url("verify")
+        await _reply(event, texts.op_need_device(), keyboards.device_gate_keyboard(url))
+        return
+    await _reply(event, texts.op_twink_blocked(settings.support_contact))
 
 
 async def _reply(event: TelegramObject, text: str, markup=None) -> None:

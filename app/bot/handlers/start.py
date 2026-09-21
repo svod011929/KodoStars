@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
-from app.bot.render import render_home
+from app.bot.render import device_url_for, render_home
 from app.bot.utils import safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import User
@@ -15,6 +15,7 @@ from app.op.base import OpContext
 from app.op.gate import OpGate
 from app.services import referrals, users
 from app.services.antifraud import bump_activity
+from app.services.devices import op_access_block_reason
 
 router = Router(name="start")
 
@@ -28,6 +29,35 @@ def _ctx(user: User, chat_id: int, bot: Bot) -> OpContext:
         language_code=user.language_code or "ru",
         is_premium=user.is_premium,
         bot=bot,
+    )
+
+
+async def _gate_device_or_op(
+    *,
+    user: User,
+    settings: Settings,
+    session: AsyncSession,
+    bot: Bot,
+    chat_id: int,
+    op_gate: OpGate,
+    verify: bool = False,
+):
+    """Run twin/device checks first; only then call PiarFlow."""
+    block = op_access_block_reason(user, settings)
+    if block == "device":
+        url = device_url_for(user, settings) or settings.web_url("verify")
+        return "device", texts.op_need_device(), keyboards.device_gate_keyboard(url)
+    if block == "twink":
+        return "twink", texts.op_twink_blocked(settings.support_contact), None
+    result = await op_gate.enforce(
+        _ctx(user, chat_id, bot), session, verify=verify, settings=settings
+    )
+    if result.allowed:
+        return "ok", None, None
+    return (
+        "op",
+        texts.op_blocked(result.provider, result.message),
+        keyboards.op_keyboard(result.sponsors),
     )
 
 
@@ -57,12 +87,16 @@ async def cmd_start(
         await message.answer(texts.banned(db_user.ban_reason or "бан", settings.support_contact))
         return
     if not is_admin:
-        result = await op_gate.enforce(_ctx(db_user, message.chat.id, bot), session, settings=settings)
-        if not result.allowed:
-            await message.answer(
-                texts.op_blocked(result.provider, result.message),
-                reply_markup=keyboards.op_keyboard(result.sponsors),
-            )
+        kind, text, markup = await _gate_device_or_op(
+            user=db_user,
+            settings=settings,
+            session=session,
+            bot=bot,
+            chat_id=message.chat.id,
+            op_gate=op_gate,
+        )
+        if kind != "ok":
+            await message.answer(text, reply_markup=markup)
             return
         db_user.last_op_ok_at = datetime.now(UTC)
     await bump_activity(session, db_user, 1)
@@ -88,20 +122,27 @@ async def op_verify(
         await safe_answer(call, texts.banned_short(), alert=True)
         return
     chat_id = call.message.chat.id if call.message else db_user.id
-    result = await op_gate.enforce(_ctx(db_user, chat_id, bot), session, verify=True, settings=settings)
-    if not result.allowed:
-        await safe_answer(call, "Ещё не все подписки засчитаны", alert=True)
-        await safe_edit(
-            call.message,
-            texts.op_blocked(result.provider, result.message),
-            keyboards.op_keyboard(result.sponsors),
-        )
+    kind, text, markup = await _gate_device_or_op(
+        user=db_user,
+        settings=settings,
+        session=session,
+        bot=bot,
+        chat_id=chat_id,
+        op_gate=op_gate,
+        verify=True,
+    )
+    if kind != "ok":
+        alert = "Сначала подтвердите устройство" if kind == "device" else "Доступ ограничен"
+        if kind == "op":
+            alert = "Ещё не все подписки засчитаны"
+        await safe_answer(call, alert, alert=True)
+        await safe_edit(call.message, text, markup)
         return
     db_user.last_op_ok_at = datetime.now(UTC)
     await bump_activity(session, db_user, 1)
     await referrals.activate_if_ready(session, user=db_user, settings=settings)
-    text, markup = await render_home(
+    home_text, home_markup = await render_home(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
     await safe_answer(call, "Доступ открыт ✅")
-    await safe_edit(call.message, text, markup)
+    await safe_edit(call.message, home_text, home_markup)

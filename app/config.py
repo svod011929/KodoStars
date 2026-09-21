@@ -5,7 +5,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Keys that admins may override at runtime through the ``app_settings`` table.
-# Everything else is env-only (tokens, DB URL, provider credentials, referral depth).
+# Everything else is env-only (tokens, DB URL, provider credentials, Fragment secrets).
 RUNTIME_OVERRIDABLE: dict[str, type] = {
     "referral_l1_percent": int,
     "referral_l2_percent": int,
@@ -23,7 +23,6 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "signup_bonus": int,
     "claim_cooldown_seconds": int,
     "op_cache_sec": int,
-    "manual_op_channels": str,
     "support_contact": str,
     "maintenance_mode": bool,
     "maintenance_text": str,
@@ -31,18 +30,14 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "notify_referrer": bool,
     "device_check_enabled": bool,
     "device_check_for_withdraw": bool,
+    "device_check_for_op": bool,
     "twink_block_referral": bool,
     "twink_block_withdraw": bool,
+    "twink_block_op": bool,
     "twink_require_ip_match": bool,
     "twink_ip_window_days": int,
+    "piarflow_unsub_penalty": int,
 }
-
-# (settings field, legacy placeholder from old .env.example, documented endpoint)
-LEGACY_PROVIDER_URLS: tuple[tuple[str, str, str], ...] = (
-    ("flyer_api_url", "https://api.flyerservice.io", "https://api.flyerhubs.com"),
-    ("botohub_api_url", "https://botohub.me/api/v1", "https://botohub.me"),
-    ("tgrass_api_url", "https://api.tgrass.online/v1", "https://tgrass.space"),
-)
 
 RUNTIME_SETTING_LABELS: dict[str, str] = {
     "referral_l1_percent": "Реф. доля L1, %",
@@ -61,7 +56,6 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "signup_bonus": "Бонус за регистрацию, ⭐",
     "claim_cooldown_seconds": "Антиспам: пауза между действиями, с",
     "op_cache_sec": "ОП: кэш проверки, с",
-    "manual_op_channels": "ОП: каналы manual (через запятую)",
     "support_contact": "Контакт поддержки (@username)",
     "maintenance_mode": "Режим обслуживания",
     "maintenance_text": "Текст режима обслуживания",
@@ -69,10 +63,13 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "notify_referrer": "Уведомлять реферера о новых рефералах",
     "device_check_enabled": "Антитвинк: проверка устройства (Mini App)",
     "device_check_for_withdraw": "Антитвинк: вывод только после проверки",
+    "device_check_for_op": "Антитвинк: ОП только после проверки устройства",
     "twink_block_referral": "Антитвинк: не платить за реферала-твинка",
     "twink_block_withdraw": "Антитвинк: запрет вывода твинкам",
+    "twink_block_op": "Антитвинк: не выдавать ОП твинкам",
     "twink_require_ip_match": "Антитвинк: считать твинком только при совпадении IP",
     "twink_ip_window_days": "Антитвинк: окно совпадения IP, дней",
+    "piarflow_unsub_penalty": "PiarFlow: штраф за отписку, ⭐",
 }
 
 
@@ -110,15 +107,16 @@ class Settings(BaseSettings):
     signup_bonus: int = 5
     claim_cooldown_seconds: int = 3
 
-    # Web server (Telegram Mini App for device verification). RubyHost exposes the
-    # HTTPS address and passes the port to listen on as SERVER_PORT.
+    # Web server (Telegram Mini App + PiarFlow unsubscribe webhook).
     web_public_url: str = ""
     server_port: int = 8080
     web_host: str = "0.0.0.0"
     device_check_enabled: bool = True
     device_check_for_withdraw: bool = True
+    device_check_for_op: bool = True
     twink_block_referral: bool = True
     twink_block_withdraw: bool = False
+    twink_block_op: bool = True
     twink_require_ip_match: bool = False
     twink_ip_window_days: int = 30
 
@@ -131,43 +129,19 @@ class Settings(BaseSettings):
     op_timeout_sec: float = 8.0
     op_cache_sec: int = 180
 
-    # Flyer — https://api.flyerhubs.com/ (key type `sub` → /check, `tasks` → /get_tasks)
-    flyer_enabled: bool = True
-    flyer_api_key: str = ""
-    flyer_api_url: str = "https://api.flyerhubs.com"
-    flyer_tasks_limit: int = 5
-
-    subgram_enabled: bool = True
-    subgram_api_key: str = ""
-    subgram_api_url: str = "https://api.subgram.ru"
-
-    # BotoHub — https://botohub.me/integration (POST /get-tasks-extended, header Auth)
-    botohub_enabled: bool = True
-    botohub_api_key: str = ""
-    botohub_api_url: str = "https://botohub.me"
-    botohub_max_op: int = 0
-
     # PiarFlow — https://piarflow.com/api-docs (POST /sponsors, /sponsors/check, Bearer)
     piarflow_enabled: bool = True
     piarflow_api_key: str = ""
     piarflow_api_url: str = "https://piarflow.com/v1"
     piarflow_max_sponsors: int = 5
+    piarflow_unsub_penalty: int = 10
 
-    # TGrass — https://tgrass.space/integration (POST /offers, header Auth)
-    tgrass_enabled: bool = True
-    tgrass_api_key: str = ""
-    tgrass_api_url: str = "https://tgrass.space"
-    tgrass_offers_limit: int = 0
-    tgrass_channels: str = ""
-
-    # Trafsly — https://trafsly.com/api-docs (POST /api/v1/get-sponsors, /confirm-subscription)
-    trafsly_enabled: bool = True
-    trafsly_api_key: str = ""
-    trafsly_api_url: str = "https://api.trafsly.com"
-    trafsly_max_sponsors: int = 5
-
-    manual_enabled: bool = True
-    manual_op_channels: str = ""
+    # Fragment — Stars payouts. Keep mnemonic/cookies ONLY in server .env.
+    fragment_wallet_mnemonic: str = ""
+    fragment_cookies: str = ""
+    fragment_tonapi_key: str = ""
+    fragment_wallet_version: str = "V5R1"
+    fragment_show_sender: bool = False
 
     log_level: str = "INFO"
     log_json: bool = True
@@ -200,6 +174,7 @@ class Settings(BaseSettings):
         "signup_bonus",
         "claim_cooldown_seconds",
         "op_cache_sec",
+        "piarflow_unsub_penalty",
     )
     @classmethod
     def _non_negative(cls, value: int) -> int:
@@ -214,19 +189,18 @@ class Settings(BaseSettings):
             raise ValueError("BROADCAST_RATE_PER_SEC must be within 1..30 (Telegram limit)")
         return value
 
+    @field_validator("fragment_wallet_version")
+    @classmethod
+    def _wallet_version(cls, value: str) -> str:
+        normalized = value.strip().upper() or "V5R1"
+        if normalized not in {"V4R2", "V5R1"}:
+            raise ValueError("FRAGMENT_WALLET_VERSION must be V4R2 or V5R1")
+        return normalized
+
     @model_validator(mode="after")
     def _withdraw_bounds(self) -> "Settings":
         if self.withdraw_max and self.withdraw_max < self.withdraw_min:
             raise ValueError("WITHDRAW_MAX must be 0 or >= WITHDRAW_MIN")
-        return self
-
-    @model_validator(mode="after")
-    def _upgrade_legacy_provider_urls(self) -> "Settings":
-        """Placeholders shipped in earlier .env.example files pointed at hosts that are
-        not the documented ones. Map them to the official endpoints transparently."""
-        for field, legacy, current in LEGACY_PROVIDER_URLS:
-            if getattr(self, field).rstrip("/") == legacy:
-                setattr(self, field, current)
         return self
 
     @property
@@ -254,6 +228,14 @@ class Settings(BaseSettings):
     def device_check_active(self) -> bool:
         """Device verification needs both the HTTPS Mini App URL and the runtime flag."""
         return self.web_enabled and self.device_check_enabled
+
+    @property
+    def fragment_configured(self) -> bool:
+        return bool(
+            self.fragment_wallet_mnemonic.strip()
+            and self.fragment_cookies.strip()
+            and self.fragment_tonapi_key.strip()
+        )
 
     def web_url(self, path: str = "") -> str:
         return f"{self.web_public_url.strip().rstrip('/')}/{path.lstrip('/')}"
