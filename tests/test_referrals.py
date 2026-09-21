@@ -122,6 +122,29 @@ async def test_attach_is_idempotent_when_edge_exists_without_referred_by(session
 
 
 @pytest.mark.asyncio
+async def test_bonus_requires_piarflow_paid_subs(session, settings) -> None:
+    from app.services import piarflow_quality
+
+    gated = settings.model_copy(update={"referral_min_piarflow_subs": 2, "min_referral_activity": 1})
+    referrer = await _make_user(session, 60)
+    referee = await _make_user(session, 61)
+    await referrals.attach_referrer(session, user=referee, payload="ref_60", settings=gated)
+    await bump_activity(session, referee, gated.min_referral_activity)
+
+    assert await referrals.activate_if_ready(session, user=referee, settings=gated) == []
+    assert await ledger.get_balance(session, referrer.id) == 0
+
+    await piarflow_quality.record_paid_subs(session, referee.id, ["https://t.me/a"])
+    assert await referrals.activate_if_ready(session, user=referee, settings=gated) == []
+
+    await piarflow_quality.record_paid_subs(session, referee.id, ["https://t.me/b"])
+    credited = await referrals.activate_if_ready(session, user=referee, settings=gated)
+    assert len(credited) == 1
+    assert referee.referral_activated is True
+    assert await ledger.get_balance(session, referrer.id) == gated.referral_l1_bonus
+
+
+@pytest.mark.asyncio
 async def test_attach_chain_stops_on_cycle(session, settings) -> None:
     a = await _make_user(session, 50)
     b = await _make_user(session, 51, referred_by=50)

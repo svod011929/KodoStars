@@ -129,10 +129,12 @@ async def test_piarflow_contract(monkeypatch) -> None:
 
     result = await adapter.check(_ctx())
     assert result.allowed is False
+    assert result.paid_links == []  # not_counted is unpaid; pending has no paid yet
     assert [(s.title, s.url) for s in result.sponsors] == [("@cryptonews", "https://t.me/cryptonews")]
 
     verified = await adapter.verify(_ctx())
     assert verified.allowed is True
+    assert verified.paid_links == ["https://t.me/cryptonews"]
     assert http.urls()[-1] == "https://piarflow.com/v1/sponsors/check"
     await adapter.verify(_ctx())
     assert http.urls()[-1] == "https://piarflow.com/v1/sponsors"

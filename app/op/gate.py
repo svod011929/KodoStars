@@ -42,6 +42,7 @@ class OpGate:
         enabled = await enabled_providers(session, effective)
         # Provider checks are network round trips: release the SQLite write lock first.
         await commit_before_io()
+        paid_links: list[str] = []
         for name in CASCADE:
             if name not in enabled:
                 continue
@@ -49,6 +50,8 @@ class OpGate:
             if adapter is None:
                 continue
             result = await (adapter.verify(ctx) if verify else adapter.check(ctx))
+            if result.paid_links:
+                paid_links.extend(result.paid_links)
             log.info(
                 "op_provider_result",
                 provider=name,
@@ -56,12 +59,14 @@ class OpGate:
                 skipped=result.skipped,
                 fail_open=result.fail_open,
                 sponsors=len(result.sponsors),
+                paid=len(result.paid_links),
             )
             if result.skipped or result.fail_open:
                 continue
             if not result.allowed:
+                result.paid_links = list(dict.fromkeys(paid_links))
                 return result
-        return OpResult.ok("gate")
+        return OpResult.ok("gate", paid_links=list(dict.fromkeys(paid_links)))
 
 
 def default_adapters(settings: Settings) -> list[OpAdapter]:

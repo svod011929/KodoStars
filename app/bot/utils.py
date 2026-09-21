@@ -8,6 +8,8 @@ from html import escape
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from app.bot import emoji as pe
+
 PAGE_SIZE = 8
 
 
@@ -75,6 +77,7 @@ async def safe_edit(
     """Edit in place; fall back to a new message when the original cannot be edited."""
     if message is None:
         return
+    text = pe.premiumize(text)
     try:
         await message.edit_text(
             text,
@@ -97,37 +100,51 @@ async def safe_answer(call: CallbackQuery, text: str | None = None, *, alert: bo
     try:
         await call.answer(text, show_alert=alert)
     except TelegramBadRequest:
-        # Query is too old or already answered — nothing to do.
         return
 
 
 def pager(prefix: str, page: int, total: int, page_size: int = PAGE_SIZE) -> list[InlineKeyboardButton]:
-    """Build a «‹ page/pages ›» row for ``callback_data`` ``f"{prefix}:{page}"``."""
+    """Build a page navigation row for ``callback_data`` ``f"{prefix}:{page}"``."""
     pages = max((total + page_size - 1) // page_size, 1)
     page = min(max(page, 0), pages - 1)
     row: list[InlineKeyboardButton] = []
     if pages <= 1:
         return row
     row.append(
-        InlineKeyboardButton(text="‹", callback_data=f"{prefix}:{max(page - 1, 0)}")
+        button("Назад", f"{prefix}:{max(page - 1, 0)}", icon="back")
         if page > 0
         else InlineKeyboardButton(text="·", callback_data="noop")
     )
     row.append(InlineKeyboardButton(text=f"{page + 1}/{pages}", callback_data="noop"))
     row.append(
-        InlineKeyboardButton(text="›", callback_data=f"{prefix}:{min(page + 1, pages - 1)}")
+        button("Далее", f"{prefix}:{min(page + 1, pages - 1)}", icon="next")
         if page < pages - 1
         else InlineKeyboardButton(text="·", callback_data="noop")
     )
     return row
 
 
-def button(text: str, data: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text=text, callback_data=data)
+def button(text: str, data: str, *, icon: str | None = None) -> InlineKeyboardButton:
+    """Inline button: plain text + premium ``icon_custom_emoji_id`` (no unicode emoji in text)."""
+    if icon is not None:
+        label, icon_id = text.strip(), pe.id_of(icon)
+    else:
+        label, icon_id = pe.split_icon(text)
+    kwargs: dict = {"text": label or text, "callback_data": data}
+    if icon_id:
+        kwargs["icon_custom_emoji_id"] = icon_id
+    return InlineKeyboardButton(**kwargs)
 
 
-def url_button(text: str, url: str) -> InlineKeyboardButton:
-    return InlineKeyboardButton(text=text, url=url)
+def url_button(text: str, url: str, *, icon: str | None = None) -> InlineKeyboardButton:
+    if icon is not None:
+        label, icon_id = text.strip(), pe.id_of(icon)
+    else:
+        label, icon_id = pe.split_icon(text)
+    kwargs: dict = {"text": label or text, "url": url}
+    if icon_id:
+        kwargs["icon_custom_emoji_id"] = icon_id
+    return InlineKeyboardButton(**kwargs)
 
 
 def markup(*rows: list[InlineKeyboardButton]) -> InlineKeyboardMarkup:

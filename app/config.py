@@ -12,6 +12,7 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "referral_l1_bonus": int,
     "referral_l2_bonus": int,
     "min_referral_activity": int,
+    "referral_min_piarflow_subs": int,
     "daily_base_reward": int,
     "daily_streak_bonus": int,
     "daily_streak_cap": int,
@@ -45,6 +46,7 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "referral_l1_bonus": "Бонус за активацию L1, ⭐",
     "referral_l2_bonus": "Бонус за активацию L2, ⭐",
     "min_referral_activity": "Порог активности реферала",
+    "referral_min_piarflow_subs": "Реф. бонус: мин. оплаченных подписок PiarFlow",
     "daily_base_reward": "Ежедневка: база, ⭐",
     "daily_streak_bonus": "Ежедневка: бонус за день серии, ⭐",
     "daily_streak_cap": "Ежедневка: потолок серии",
@@ -93,6 +95,7 @@ class Settings(BaseSettings):
     referral_l1_bonus: int = 10
     referral_l2_bonus: int = 3
     min_referral_activity: int = 2
+    referral_min_piarflow_subs: int = 2
     notify_referrer: bool = True
 
     daily_base_reward: int = 5
@@ -164,6 +167,7 @@ class Settings(BaseSettings):
         "referral_l1_bonus",
         "referral_l2_bonus",
         "min_referral_activity",
+        "referral_min_piarflow_subs",
         "daily_base_reward",
         "daily_streak_bonus",
         "daily_streak_cap",

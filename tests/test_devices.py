@@ -14,6 +14,7 @@ FP_B = "b" * 64
 
 
 def _web_settings(**overrides) -> Settings:
+    overrides.setdefault("referral_min_piarflow_subs", 0)
     return Settings(
         admin_ids_raw="1",
         database_url="sqlite+aiosqlite://",
@@ -164,7 +165,12 @@ async def test_referral_bonus_waits_for_verification_and_skips_twinks(session) -
     assert await ledger.get_balance(session, referrer.id) == 2 * settings.referral_l1_bonus
 
     # With the check disabled the gate is transparent.
-    plain = Settings(admin_ids_raw="1", database_url="sqlite+aiosqlite://", min_referral_activity=1)
+    plain = Settings(
+        admin_ids_raw="1",
+        database_url="sqlite+aiosqlite://",
+        min_referral_activity=1,
+        referral_min_piarflow_subs=0,
+    )
     other = await _user(session, 134)
     await referrals.attach_referrer(session, user=other, payload="ref_131", settings=plain)
     await bump_activity(session, other, 1)

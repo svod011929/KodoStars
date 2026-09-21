@@ -13,6 +13,7 @@ from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext
 from app.op.gate import OpGate
+from app.services import piarflow_quality
 from app.services.devices import op_access_block_reason
 
 _SKIP_PREFIXES = (
@@ -71,6 +72,8 @@ class OpGateMiddleware(BaseMiddleware):
             bot=bot,
         )
         result = await self._gate.enforce(ctx, session, settings=settings)
+        if result.paid_links:
+            await piarflow_quality.record_paid_subs(session, user.id, result.paid_links)
         if result.allowed:
             user.last_op_ok_at = datetime.now(UTC)
             return await handler(event, data)

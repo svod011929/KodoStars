@@ -71,6 +71,7 @@ async def web() -> AsyncIterator[Harness]:
         signup_bonus=0,
         claim_cooldown_seconds=0,
         min_referral_activity=1,
+        referral_min_piarflow_subs=0,
         web_public_url="https://mini.example",
     )
     engine = create_engine(settings)
