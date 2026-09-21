@@ -5,6 +5,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import emoji as pe
 from app.bot.middlewares.events import unwrap_event
 from app.services.access import AccessRegistry
 from app.services.app_settings import RuntimeSettingsStore
@@ -16,6 +17,7 @@ class RuntimeMiddleware(BaseMiddleware):
     def __init__(self, store: RuntimeSettingsStore, access: AccessRegistry) -> None:
         self._store = store
         self._access = access
+        pe.apply_currency(store.base.currency_emoji_id, store.base.currency_emoji_fallback)
 
     async def __call__(
         self,

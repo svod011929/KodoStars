@@ -1,8 +1,13 @@
+import re
 from functools import lru_cache
 from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Keep in sync with app.bot.emoji.DEFAULT_CURRENCY_* (avoid circular import).
+_DEFAULT_CURRENCY_EMOJI_ID = "5904462880941545555"
+_DEFAULT_CURRENCY_FALLBACK = "⭐"
 
 # Keys that admins may override at runtime through the ``app_settings`` table.
 # Everything else is env-only (tokens, DB URL, provider credentials, Fragment secrets).
@@ -38,6 +43,8 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "twink_require_ip_match": bool,
     "twink_ip_window_days": int,
     "piarflow_unsub_penalty": int,
+    "currency_emoji_id": str,
+    "currency_emoji_fallback": str,
 }
 
 RUNTIME_SETTING_LABELS: dict[str, str] = {
@@ -72,6 +79,8 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "twink_require_ip_match": "Антитвинк: считать твинком только при совпадении IP",
     "twink_ip_window_days": "Антитвинк: окно совпадения IP, дней",
     "piarflow_unsub_penalty": "PiarFlow: штраф за отписку, ⭐",
+    "currency_emoji_id": "Валюта: ID премиум-эмодзи",
+    "currency_emoji_fallback": "Валюта: unicode-fallback эмодзи",
 }
 
 
@@ -139,6 +148,10 @@ class Settings(BaseSettings):
     piarflow_max_sponsors: int = 5
     piarflow_unsub_penalty: int = 10
 
+    # Premium custom-emoji for the internal Stars currency (messages + icon="star").
+    currency_emoji_id: str = _DEFAULT_CURRENCY_EMOJI_ID
+    currency_emoji_fallback: str = _DEFAULT_CURRENCY_FALLBACK
+
     # Fragment — Stars payouts. Keep mnemonic/cookies ONLY in server .env.
     fragment_wallet_mnemonic: str = ""
     fragment_cookies: str = ""
@@ -192,6 +205,25 @@ class Settings(BaseSettings):
         if not 1 <= value <= 30:
             raise ValueError("BROADCAST_RATE_PER_SEC must be within 1..30 (Telegram limit)")
         return value
+
+    @field_validator("currency_emoji_id")
+    @classmethod
+    def _currency_emoji_id(cls, value: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            return _DEFAULT_CURRENCY_EMOJI_ID
+        match = re.search(r'emoji-id=["\']?(\d+)', text)
+        if match:
+            return match.group(1)
+        if text.isdigit():
+            return text
+        raise ValueError("CURRENCY_EMOJI_ID must be a numeric Telegram custom emoji id")
+
+    @field_validator("currency_emoji_fallback")
+    @classmethod
+    def _currency_fallback(cls, value: str) -> str:
+        text = (value or "").strip()
+        return text or _DEFAULT_CURRENCY_FALLBACK
 
     @field_validator("fragment_wallet_version")
     @classmethod

@@ -31,6 +31,9 @@ Telegram-бот на **Python 3.12 / aiogram 3**: реферальная эко�
 до выдачи заданий, вебхук отписок со штрафом, реферальный бонус только после ≥N оплаченных
 подписок PiarFlow. Выплата Stars пользователям — через **Fragment** (mnemonic + cookies).
 UI использует Telegram **premium emoji** (`<tg-emoji>` в сообщениях, `icon_custom_emoji_id` на кнопках).
+Эмодзи **валюты** (баланс, награды) задаётся через `CURRENCY_EMOJI_ID` / `CURRENCY_EMOJI_FALLBACK`
+и меняется в рантайме: **Админка → Настройки** (можно вставить numeric id или кусок
+`<tg-emoji emoji-id="…">…</tg-emoji>`).
 
 Интерфейс — русский. Выплаты пользователям — **только Telegram Stars**. CryptoBot нет.
 
@@ -133,7 +136,7 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 | Telegram | `BOT_TOKEN`, `ADMIN_IDS`, `SUPPORT_CONTACT` |
 | Веб / антитвинк / вебхук | `WEB_PUBLIC_URL`, `SERVER_PORT`, `DEVICE_CHECK_ENABLED`, `DEVICE_CHECK_FOR_OP`, `DEVICE_CHECK_FOR_WITHDRAW`, `TWINK_BLOCK_REFERRAL`, `TWINK_BLOCK_OP`, `TWINK_BLOCK_WITHDRAW`, `TWINK_REQUIRE_IP_MATCH`, `TWINK_IP_WINDOW_DAYS` |
 | БД | `DATABASE_URL` (`sqlite+aiosqlite:///./data/kodostars.db` или `postgresql+asyncpg://…`) |
-| Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, **`REFERRAL_MIN_PIARFLOW_SUBS`**, `NOTIFY_REFERRER`, ежедневка, `SIGNUP_BONUS`, `CLAIM_COOLDOWN_SECONDS` |
+| Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, **`REFERRAL_MIN_PIARFLOW_SUBS`**, `NOTIFY_REFERRER`, ежедневка, `SIGNUP_BONUS`, `CLAIM_COOLDOWN_SECONDS`, **`CURRENCY_EMOJI_ID`**, **`CURRENCY_EMOJI_FALLBACK`** |
 | Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS` |
 | Операционные | `MAINTENANCE_MODE`, `MAINTENANCE_TEXT`, `BROADCAST_RATE_PER_SEC`, `THROTTLE_SECONDS` |
 | PiarFlow | `PIARFLOW_ENABLED`, `PIARFLOW_API_KEY`, `PIARFLOW_API_URL`, `PIARFLOW_MAX_SPONSORS`, `PIARFLOW_UNSUB_PENALTY` |

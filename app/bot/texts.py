@@ -24,7 +24,20 @@ from app.services.leaderboard import LeaderRow
 from app.services.levels import LevelInfo, format_multiplier, progress_bar
 from app.services.tasks import task_target
 
-STAR = pe.star()  # premium Stars glyph
+
+class _CurrencyGlyph:
+    """Resolves to the live premium currency emoji on every stringify."""
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        return pe.currency()
+
+    def __format__(self, spec: str) -> str:
+        return format(str(self), spec)
+
+
+STAR = _CurrencyGlyph()  # premium Stars glyph (admin-overridable)
 
 
 def home(
