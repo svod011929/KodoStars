@@ -235,11 +235,7 @@ class Settings(BaseSettings):
 
     @property
     def fragment_configured(self) -> bool:
-        return bool(
-            self.fragment_wallet_mnemonic.strip()
-            and self.fragment_cookies.strip()
-            and self.fragment_tonapi_key.strip()
-        )
+        return bool(self.fragment_wallet_mnemonic.strip() and self.fragment_cookies.strip())
 
     def web_url(self, path: str = "") -> str:
         return f"{self.web_public_url.strip().rstrip('/')}/{path.lstrip('/')}"
