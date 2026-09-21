@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from app.bot import emoji as pe
 from app.bot.utils import button, fmt_dt, fmt_duration, fmt_signed, h, markup
 from app.config import Settings
 from app.db.models import (
@@ -23,7 +24,7 @@ from app.services.leaderboard import LeaderRow
 from app.services.levels import LevelInfo, format_multiplier, progress_bar
 from app.services.tasks import task_target
 
-STAR = "⭐"
+STAR = pe.star()  # premium Stars glyph
 
 
 def home(
@@ -119,7 +120,7 @@ def notify_piarflow_unsubscribed(penalty: int) -> str:
 
 
 def home_button():
-    return markup([button("🏠 В меню", "menu:home")])
+    return markup([button("В меню", "menu:home", icon="home")])
 
 
 def profile(
@@ -205,7 +206,8 @@ def referrals(
         )
     lines += [
         f"Активация — когда друг набирает {settings.min_referral_activity} очк. активности "
-        "(ежедневка, задания, промокод, буст).",
+        f"и подписывается минимум на {settings.referral_min_piarflow_subs} ресурса PiarFlow "
+        "с начисленной наградой в интеграции.",
         "",
         f"👤 L1: <b>{stats.get(1, 0)}</b> (активных {activated_l1}) · L2: <b>{stats.get(2, 0)}</b>",
         f"💎 Заработано: <b>{earned} {STAR}</b>",

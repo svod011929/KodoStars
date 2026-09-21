@@ -345,6 +345,18 @@ class FraudEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PiarflowPaidSub(Base):
+    """Offer links for which PiarFlow credited a sale (status ``subscribed``)."""
+
+    __tablename__ = "piarflow_paid_subs"
+    __table_args__ = (UniqueConstraint("user_id", "offer_link", name="uq_piarflow_paid_sub"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    offer_link: Mapped[str] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PiarflowUnsub(Base):
     """Idempotent log of PiarFlow unsubscribe webhooks (one row per user+offer)."""
 

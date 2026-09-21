@@ -205,7 +205,7 @@ async def test_device_check_button_and_gating_in_ui(harness: BotHarness) -> None
     card = h.tg.last_text(ADMIN_ID)
     assert "Устройство: подтверждено" in card
     await h.feed(callback_update(ADMIN_ID, f"admin:u:{USER_ID}:trust:1"))
-    assert "🤝 доверенный" in h.tg.last_text(ADMIN_ID)
+    assert "доверенный" in h.tg.last_text(ADMIN_ID)
     await h.feed(callback_update(ADMIN_ID, "admin:twinks"))
     assert "Твинки" in h.tg.last_text(ADMIN_ID)
 
@@ -335,14 +335,14 @@ async def test_admin_user_card_adjust_and_ban(harness: BotHarness) -> None:
 
     await h.feed(callback_update(ADMIN_ID, f"admin:u:{USER_ID}:ban"))
     await h.feed(message_update(ADMIN_ID, "мультиаккаунт"))
-    assert "🚫 БАН" in h.tg.last_text(ADMIN_ID)
+    assert "БАН" in h.tg.last_text(ADMIN_ID)
     await h.feed(callback_update(USER_ID, "menu:daily"))
     assert "Доступ закрыт" in h.tg.alerts()[-1]
     await h.feed(message_update(USER_ID, "/start"))
     assert "мультиаккаунт" in h.tg.last_text(USER_ID)
 
     await h.feed(callback_update(ADMIN_ID, f"admin:u:{USER_ID}:unban"))
-    assert "✅ активен" in h.tg.last_text(ADMIN_ID)
+    assert "активен" in h.tg.last_text(ADMIN_ID)
     await h.feed(callback_update(ADMIN_ID, "admin:audit:0"))
     audit_text = h.tg.last_text(ADMIN_ID)
     assert "Разбан" in audit_text and "Корректировка баланса" in audit_text

@@ -24,38 +24,40 @@ from app.db.models import (
 )
 from app.op.gate import CASCADE, PROVIDER_TITLES
 
-BACK = "‹ Назад"
+
+def _back(target: str = "admin:home"):
+    return button("Назад", target, icon="back")
 
 
 def home() -> InlineKeyboardMarkup:
     return markup(
-        [button("📊 Статистика", "admin:stats"), button("👥 Пользователи", "admin:users")],
-        [button("💸 Выводы", "admin:wd"), button("📣 Рассылка", "admin:bc")],
-        [button("📋 Задания", "admin:tasks"), button("🚀 Бусты", "admin:boosts")],
-        [button("🎟 Промокоды", "admin:promo:list:0"), button("💳 Платежи", "admin:pay:0")],
-        [button("⚙️ Настройки", "admin:set"), button("🔒 PiarFlow", "admin:prov")],
-        [button("🛡 Админы", "admin:adm"), button("🧾 Журнал", "admin:audit:0")],
-        [button("🕵️ Антифрод", "admin:fraud:0"), button("🗂 Данные", "admin:data")],
-        [button("🏠 В меню", "menu:home")],
+        [button("Статистика", "admin:stats", icon="stats"), button("Пользователи", "admin:users", icon="users")],
+        [button("Выводы", "admin:wd", icon="withdraw"), button("Рассылка", "admin:bc", icon="broadcast")],
+        [button("Задания", "admin:tasks", icon="tasks"), button("Бусты", "admin:boosts", icon="boost")],
+        [button("Промокоды", "admin:promo:list:0", icon="promo"), button("Платежи", "admin:pay:0", icon="payments")],
+        [button("Настройки", "admin:set", icon="settings"), button("PiarFlow", "admin:prov", icon="lock")],
+        [button("Админы", "admin:adm", icon="shield"), button("Журнал", "admin:audit:0", icon="audit")],
+        [button("Антифрод", "admin:fraud:0", icon="fraud"), button("Данные", "admin:data", icon="data")],
+        [button("В меню", "menu:home", icon="home")],
     )
 
 
 def back_home(*rows: list) -> InlineKeyboardMarkup:
-    return markup(*rows, [button(BACK, "admin:home")])
+    return markup(*rows, [_back()])
 
 
 def stats() -> InlineKeyboardMarkup:
     return markup(
-        [button("🔄 Обновить", "admin:stats"), button("🧮 Сверка балансов", "admin:reconcile")],
-        [button(BACK, "admin:home")],
+        [button("Обновить", "admin:stats", icon="refresh"), button("Сверка балансов", "admin:reconcile", icon="code")],
+        [_back()],
     )
 
 
 def reconcile(has_drift: bool) -> InlineKeyboardMarkup:
     rows = []
     if has_drift:
-        rows.append([button("🛠 Исправить по леджеру", "admin:reconcile:fix")])
-    rows.append([button("📊 Статистика", "admin:stats"), button(BACK, "admin:home")])
+        rows.append([button("Исправить по леджеру", "admin:reconcile:fix", icon="admin")])
+    rows.append([button("Статистика", "admin:stats", icon="stats"), _back()])
     return markup(*rows)
 
 
@@ -63,69 +65,92 @@ def reconcile(has_drift: bool) -> InlineKeyboardMarkup:
 
 
 def users_home(recent: Sequence[User]) -> InlineKeyboardMarkup:
-    rows = [[button(f"{u.display_name[:24]} · {u.id}", f"admin:u:{u.id}")] for u in recent[:5]]
-    rows.append([button("🕵️ Подозрительные", "admin:suspicious"), button(BACK, "admin:home")])
+    rows = [[button(f"{u.display_name[:24]} · {u.id}", f"admin:u:{u.id}", icon="profile")] for u in recent[:5]]
+    rows.append([button("Подозрительные", "admin:suspicious", icon="fraud"), _back()])
     return markup(*rows)
 
 
 def user_card(user: User, *, is_owner_viewer: bool, open_wd: Withdrawal | None) -> InlineKeyboardMarkup:
     ban = (
-        button("♻️ Разбанить", f"admin:u:{user.id}:unban")
+        button("Разбанить", f"admin:u:{user.id}:unban", icon="unban")
         if user.is_banned
-        else button("🚫 Бан", f"admin:u:{user.id}:ban")
+        else button("Бан", f"admin:u:{user.id}:ban", icon="ban")
     )
     rows = [
-        [button("➕/➖ Баланс", f"admin:u:{user.id}:adj"), ban],
+        [button("Баланс", f"admin:u:{user.id}:adj", icon="coin"), ban],
         [
-            button("📜 Леджер", f"admin:u:{user.id}:ledger:0"),
-            button("👥 Рефералы", f"admin:u:{user.id}:refs"),
+            button("Леджер", f"admin:u:{user.id}:ledger:0", icon="scroll"),
+            button("Рефералы", f"admin:u:{user.id}:refs", icon="people"),
         ],
-        [button("💬 Написать", f"admin:u:{user.id}:msg"), button("📝 Заметка", f"admin:u:{user.id}:note")],
-        [button("💳 Платежи", f"admin:u:{user.id}:pays"), button("🕵️ Фрод", f"admin:u:{user.id}:fraud")],
+        [
+            button("Написать", f"admin:u:{user.id}:msg", icon="write"),
+            button("Заметка", f"admin:u:{user.id}:note", icon="pencil"),
+        ],
+        [
+            button("Платежи", f"admin:u:{user.id}:pays", icon="payments"),
+            button("Фрод", f"admin:u:{user.id}:fraud", icon="fraud"),
+        ],
     ]
     trust = (
-        button("🤝 Снять доверие", f"admin:u:{user.id}:trust:0")
+        button("Снять доверие", f"admin:u:{user.id}:trust:0", icon="handshake")
         if user.is_trusted
-        else button("🤝 Доверенный (не твинк)", f"admin:u:{user.id}:trust:1")
+        else button("Доверенный (не твинк)", f"admin:u:{user.id}:trust:1", icon="handshake")
     )
     rows.append([trust])
     if open_wd is not None:
-        rows.append([button(f"💸 Заявка #{open_wd.id}", f"admin:wd:view:{open_wd.id}")])
-    rows.append([button("🔄 Обновить", f"admin:u:{user.id}"), button("👥 Пользователи", "admin:users")])
+        rows.append([button(f"Заявка #{open_wd.id}", f"admin:wd:view:{open_wd.id}", icon="withdraw")])
+    rows.append(
+        [
+            button("Обновить", f"admin:u:{user.id}", icon="refresh"),
+            button("Пользователи", "admin:users", icon="users"),
+        ]
+    )
     return markup(*rows)
 
 
 def user_sub(user_id: int, *extra: list) -> InlineKeyboardMarkup:
-    return markup(*extra, [button("👤 Карточка", f"admin:u:{user_id}"), button(BACK, "admin:users")])
+    return markup(
+        *extra,
+        [button("Карточка", f"admin:u:{user_id}", icon="profile"), _back("admin:users")],
+    )
 
 
 def user_ledger(user_id: int, page: int, total: int) -> InlineKeyboardMarkup:
     return markup(
         pager(f"admin:u:{user_id}:ledger", page, total, PAGE_SIZE),
-        [button("👤 Карточка", f"admin:u:{user_id}")],
+        [button("Карточка", f"admin:u:{user_id}", icon="profile")],
     )
 
 
 def cancel_to(target: str) -> InlineKeyboardMarkup:
-    return markup([button("Отмена", target)])
+    return markup([button("Отмена", target, icon="cross")])
 
 
 def fraud(page: int, total: int, user_id: int | None) -> InlineKeyboardMarkup:
     prefix = f"admin:u:{user_id}:fraud" if user_id else "admin:fraud"
-    back = button("👤 Карточка", f"admin:u:{user_id}") if user_id else button(BACK, "admin:home")
+    back = button("Карточка", f"admin:u:{user_id}", icon="profile") if user_id else _back()
     return markup(
         pager(prefix, page, total, PAGE_SIZE),
-        [button("🕵️ Подозрительные", "admin:suspicious"), button("👯 Твинки", "admin:twinks")],
+        [
+            button("Подозрительные", "admin:suspicious", icon="fraud"),
+            button("Твинки", "admin:twinks", icon="twins"),
+        ],
         [back],
     )
 
 
 def suspicious(rows: Sequence[tuple[User, int, int]]) -> InlineKeyboardMarkup:
     buttons = [
-        [button(f"{u.display_name[:20]} · {act}/{total}", f"admin:u:{u.id}")] for u, total, act in rows[:8]
+        [button(f"{u.display_name[:20]} · {act}/{total}", f"admin:u:{u.id}", icon="profile")]
+        for u, total, act in rows[:8]
     ]
-    buttons.append([button("🕵️ События", "admin:fraud:0"), button("👯 Твинки", "admin:twinks")])
-    buttons.append([button(BACK, "admin:home")])
+    buttons.append(
+        [
+            button("События", "admin:fraud:0", icon="fraud"),
+            button("Твинки", "admin:twinks", icon="twins"),
+        ]
+    )
+    buttons.append([_back()])
     return markup(*buttons)
 
 
@@ -134,8 +159,10 @@ def twinks(clusters: Sequence[tuple[str, int, Sequence[User]]]) -> InlineKeyboar
     for _fp, count, members in clusters[:8]:
         first = members[0] if members else None
         if first is not None:
-            rows.append([button(f"{first.display_name[:18]} +{count - 1}", f"admin:u:{first.id}")])
-    rows.append([button("🕵️ События", "admin:fraud:0"), button(BACK, "admin:home")])
+            rows.append(
+                [button(f"{first.display_name[:18]} +{count - 1}", f"admin:u:{first.id}", icon="twins")]
+            )
+    rows.append([button("События", "admin:fraud:0", icon="fraud"), _back()])
     return markup(*rows)
 
 
@@ -145,11 +172,14 @@ def twinks(clusters: Sequence[tuple[str, int, Sequence[User]]]) -> InlineKeyboar
 def withdrawals_home(pending: int, approved: int) -> InlineKeyboardMarkup:
     return markup(
         [
-            button(f"⏳ Ожидают ({pending})", "admin:wd:list:pending:0"),
-            button(f"🟢 Согласованы ({approved})", "admin:wd:list:approved:0"),
+            button(f"Ожидают ({pending})", "admin:wd:list:pending:0", icon="wait"),
+            button(f"Согласованы ({approved})", "admin:wd:list:approved:0", icon="ok_green"),
         ],
-        [button("📚 История", "admin:wd:list:history:0"), button("🔄 Обновить", "admin:wd")],
-        [button(BACK, "admin:home")],
+        [
+            button("История", "admin:wd:list:history:0", icon="scroll"),
+            button("Обновить", "admin:wd", icon="refresh"),
+        ],
+        [_back()],
     )
 
 
@@ -157,25 +187,24 @@ def withdrawals_list(
     items: Sequence[Withdrawal], names: dict[int, str], filter_name: str, page: int, total: int
 ) -> InlineKeyboardMarkup:
     icons = {
-        WithdrawalStatus.PENDING.value: "⏳",
-        WithdrawalStatus.APPROVED_MANUAL.value: "🟢",
-        WithdrawalStatus.SENT.value: "✅",
-        WithdrawalStatus.REJECTED.value: "🔴",
-        WithdrawalStatus.CANCELLED.value: "↩️",
+        WithdrawalStatus.PENDING.value: "wait",
+        WithdrawalStatus.APPROVED_MANUAL.value: "ok_green",
+        WithdrawalStatus.SENT.value: "check",
+        WithdrawalStatus.REJECTED.value: "no_entry",
+        WithdrawalStatus.CANCELLED.value: "undo",
     }
     rows = [
         [
             button(
-                f"{icons.get(w.status, '')} #{w.id} · {w.gift_label} · {names.get(w.user_id, w.user_id)}"[
-                    :60
-                ],
+                f"#{w.id} · {w.gift_label} · {names.get(w.user_id, w.user_id)}"[:60],
                 f"admin:wd:view:{w.id}",
+                icon=icons.get(w.status),
             )
         ]
         for w in items
     ]
     rows.append(pager(f"admin:wd:list:{filter_name}", page, total, PAGE_SIZE))
-    rows.append([button("💸 Выводы", "admin:wd"), button(BACK, "admin:home")])
+    rows.append([button("Выводы", "admin:wd", icon="withdraw"), _back()])
     return markup(*rows)
 
 
@@ -183,13 +212,16 @@ def withdrawal_actions(wd_id: int, status: str, *, has_gift: bool = False) -> In
     rows = []
     if status == WithdrawalStatus.PENDING.value:
         rows.append(
-            [button("✅ Согласовать", f"admin:wd:ok:{wd_id}"), button("🔴 Отклонить", f"admin:wd:no:{wd_id}")]
+            [
+                button("Согласовать", f"admin:wd:ok:{wd_id}", icon="check"),
+                button("Отклонить", f"admin:wd:no:{wd_id}", icon="no_entry"),
+            ]
         )
     elif status == WithdrawalStatus.APPROVED_MANUAL.value:
-        rows.append([button("⭐ Отправить через Fragment", f"admin:wd:fragment:{wd_id}")])
-        rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd_id}")])
-        rows.append([button("🔴 Отклонить", f"admin:wd:no:{wd_id}")])
-    rows.append([button("🔎 Открыть заявку", f"admin:wd:view:{wd_id}")])
+        rows.append([button("Отправить через Fragment", f"admin:wd:fragment:{wd_id}", icon="star")])
+        rows.append([button("Уже отправил вручную", f"admin:wd:sent:{wd_id}", icon="check")])
+        rows.append([button("Отклонить", f"admin:wd:no:{wd_id}", icon="no_entry")])
+    rows.append([button("Открыть заявку", f"admin:wd:view:{wd_id}", icon="eye")])
     return markup(*rows)
 
 
@@ -197,16 +229,27 @@ def withdrawal_card(wd: Withdrawal) -> InlineKeyboardMarkup:
     rows = []
     if wd.status == WithdrawalStatus.PENDING.value:
         rows.append(
-            [button("✅ Согласовать", f"admin:wd:ok:{wd.id}"), button("🔴 Отклонить", f"admin:wd:no:{wd.id}")]
+            [
+                button("Согласовать", f"admin:wd:ok:{wd.id}", icon="check"),
+                button("Отклонить", f"admin:wd:no:{wd.id}", icon="no_entry"),
+            ]
         )
     elif wd.status == WithdrawalStatus.APPROVED_MANUAL.value:
-        rows.append([button("⭐ Отправить через Fragment", f"admin:wd:fragment:{wd.id}")])
-        rows.append([button("✅ Уже отправил вручную", f"admin:wd:sent:{wd.id}")])
-        rows.append([button("🔴 Отклонить (вернуть Stars)", f"admin:wd:no:{wd.id}")])
+        rows.append([button("Отправить через Fragment", f"admin:wd:fragment:{wd.id}", icon="star")])
+        rows.append([button("Уже отправил вручную", f"admin:wd:sent:{wd.id}", icon="check")])
+        rows.append([button("Отклонить (вернуть Stars)", f"admin:wd:no:{wd.id}", icon="no_entry")])
     rows.append(
-        [button("👤 Пользователь", f"admin:u:{wd.user_id}"), button("🔄 Обновить", f"admin:wd:view:{wd.id}")]
+        [
+            button("Пользователь", f"admin:u:{wd.user_id}", icon="profile"),
+            button("Обновить", f"admin:wd:view:{wd.id}", icon="refresh"),
+        ]
     )
-    rows.append([button("⏳ Очередь", "admin:wd:list:pending:0"), button("💸 Выводы", "admin:wd")])
+    rows.append(
+        [
+            button("Очередь", "admin:wd:list:pending:0", icon="wait"),
+            button("Выводы", "admin:wd", icon="withdraw"),
+        ]
+    )
     return markup(*rows)
 
 
@@ -214,41 +257,58 @@ def withdrawal_card(wd: Withdrawal) -> InlineKeyboardMarkup:
 
 
 def broadcast_home(running: Broadcast | None, history: Sequence[Broadcast]) -> InlineKeyboardMarkup:
-    rows = [[button("✉️ Новая рассылка", "admin:bc:new")]]
+    rows = [[button("Новая рассылка", "admin:bc:new", icon="letter")]]
     if running is not None:
-        rows.append([button(f"▶️ Рассылка #{running.id}", f"admin:bc:view:{running.id}")])
+        rows.append([button(f"Рассылка #{running.id}", f"admin:bc:view:{running.id}", icon="play")])
     for item in history[:3]:
         if running is not None and item.id == running.id:
             continue
         rows.append(
-            [button(f"#{item.id} · {item.status} · {item.sent}/{item.total}", f"admin:bc:view:{item.id}")]
+            [
+                button(
+                    f"#{item.id} · {item.status} · {item.sent}/{item.total}",
+                    f"admin:bc:view:{item.id}",
+                    icon="broadcast",
+                )
+            ]
         )
-    rows.append([button(BACK, "admin:home")])
+    rows.append([_back()])
     return markup(*rows)
 
 
 def broadcast_button_step() -> InlineKeyboardMarkup:
-    return markup([button("Без кнопки", "admin:bc:btn:no")], [button("Отмена", "admin:bc")])
+    return markup(
+        [button("Без кнопки", "admin:bc:btn:no", icon="cross")],
+        [button("Отмена", "admin:bc", icon="cross")],
+    )
 
 
 def broadcast_audience() -> InlineKeyboardMarkup:
-    rows = [[button(label, f"admin:bc:aud:{key}")] for key, label in BROADCAST_AUDIENCE_LABELS.items()]
-    rows.append([button("Отмена", "admin:bc")])
+    rows = [[button(label, f"admin:bc:aud:{key}", icon="users")] for key, label in BROADCAST_AUDIENCE_LABELS.items()]
+    rows.append([button("Отмена", "admin:bc", icon="cross")])
     return markup(*rows)
 
 
 def broadcast_confirm() -> InlineKeyboardMarkup:
     return markup(
-        [button("🚀 Запустить", "admin:bc:go"), button("👁 Тест себе", "admin:bc:test")],
-        [button("Отмена", "admin:bc")],
+        [
+            button("Запустить", "admin:bc:go", icon="boost"),
+            button("Тест себе", "admin:bc:test", icon="eye"),
+        ],
+        [button("Отмена", "admin:bc", icon="cross")],
     )
 
 
 def broadcast_progress(b: Broadcast, running: bool) -> InlineKeyboardMarkup:
     rows = []
     if running:
-        rows.append([button("⏹ Остановить", f"admin:bc:stop:{b.id}")])
-    rows.append([button("🔄 Обновить", f"admin:bc:view:{b.id}"), button("📣 Рассылки", "admin:bc")])
+        rows.append([button("Остановить", f"admin:bc:stop:{b.id}", icon="stop_btn")])
+    rows.append(
+        [
+            button("Обновить", f"admin:bc:view:{b.id}", icon="refresh"),
+            button("Рассылки", "admin:bc", icon="broadcast"),
+        ]
+    )
     return markup(*rows)
 
 
@@ -257,70 +317,90 @@ def broadcast_progress(b: Broadcast, running: bool) -> InlineKeyboardMarkup:
 
 def tasks_home(tasks: Sequence[Task]) -> InlineKeyboardMarkup:
     rows = [
-        [button(f"{'🟢' if t.is_active else '⚪'} {t.title[:28]} · {t.reward}⭐", f"admin:task:{t.id}")]
+        [
+            button(
+                f"{t.title[:28]} · {t.reward}",
+                f"admin:task:{t.id}",
+                icon="ok_green" if t.is_active else "off",
+            )
+        ]
         for t in tasks[:12]
     ]
-    rows.append([button("➕ Новое задание", "admin:task:new"), button(BACK, "admin:home")])
+    rows.append([button("Новое задание", "admin:task:new", icon="plus"), _back()])
     return markup(*rows)
 
 
 def task_card(task: Task) -> InlineKeyboardMarkup:
-    toggle = "⚪ Выключить" if task.is_active else "🟢 Включить"
+    toggle = "Выключить" if task.is_active else "Включить"
+    toggle_icon = "off" if task.is_active else "ok_green"
     return markup(
-        [button(toggle, f"admin:task:{task.id}:tg"), button("🗑 Удалить", f"admin:task:{task.id}:del")],
         [
-            button("✏️ Название", f"admin:task:{task.id}:e:title"),
-            button("✏️ Описание", f"admin:task:{task.id}:e:desc"),
+            button(toggle, f"admin:task:{task.id}:tg", icon=toggle_icon),
+            button("Удалить", f"admin:task:{task.id}:del", icon="trash"),
         ],
         [
-            button("✏️ Награда", f"admin:task:{task.id}:e:reward"),
-            button("✏️ Условие", f"admin:task:{task.id}:e:target"),
+            button("Название", f"admin:task:{task.id}:e:title", icon="pencil"),
+            button("Описание", f"admin:task:{task.id}:e:desc", icon="pencil"),
         ],
-        [button("✏️ Порядок", f"admin:task:{task.id}:e:order"), button("📋 Задания", "admin:tasks")],
+        [
+            button("Награда", f"admin:task:{task.id}:e:reward", icon="pencil"),
+            button("Условие", f"admin:task:{task.id}:e:target", icon="pencil"),
+        ],
+        [
+            button("Порядок", f"admin:task:{task.id}:e:order", icon="pencil"),
+            button("Задания", "admin:tasks", icon="tasks"),
+        ],
     )
 
 
 def task_kinds() -> InlineKeyboardMarkup:
-    rows = [[button(label, f"admin:task:new:{kind}")] for kind, label in TASK_KIND_LABELS.items()]
-    rows.append([button("Отмена", "admin:tasks")])
+    rows = [[button(label, f"admin:task:new:{kind}", icon="tasks")] for kind, label in TASK_KIND_LABELS.items()]
+    rows.append([button("Отмена", "admin:tasks", icon="cross")])
     return markup(*rows)
 
 
 def boosts_home(products: Sequence[BoostProduct]) -> InlineKeyboardMarkup:
     rows = [
-        [button(f"{'🟢' if p.is_active else '⚪'} {p.title[:26]} · {p.xtr_price} XTR", f"admin:boost:{p.id}")]
+        [
+            button(
+                f"{p.title[:26]} · {p.xtr_price} XTR",
+                f"admin:boost:{p.id}",
+                icon="ok_green" if p.is_active else "off",
+            )
+        ]
         for p in products[:12]
     ]
-    rows.append([button("➕ Новый буст", "admin:boost:new"), button(BACK, "admin:home")])
+    rows.append([button("Новый буст", "admin:boost:new", icon="plus"), _back()])
     return markup(*rows)
 
 
 def boost_card(product: BoostProduct) -> InlineKeyboardMarkup:
-    toggle = "⚪ Выключить" if product.is_active else "🟢 Включить"
+    toggle = "Выключить" if product.is_active else "Включить"
+    toggle_icon = "off" if product.is_active else "ok_green"
     param = (
-        button("✏️ Кол-во Stars", f"admin:boost:{product.id}:e:amount")
+        button("Кол-во Stars", f"admin:boost:{product.id}:e:amount", icon="pencil")
         if product.kind == BoostKind.STARS_PACK.value
-        else button("✏️ Множитель/часы", f"admin:boost:{product.id}:e:mult")
+        else button("Множитель/часы", f"admin:boost:{product.id}:e:mult", icon="pencil")
     )
     return markup(
         [
-            button(toggle, f"admin:boost:{product.id}:tg"),
-            button("🗑 Удалить", f"admin:boost:{product.id}:del"),
+            button(toggle, f"admin:boost:{product.id}:tg", icon=toggle_icon),
+            button("Удалить", f"admin:boost:{product.id}:del", icon="trash"),
         ],
         [
-            button("✏️ Название", f"admin:boost:{product.id}:e:title"),
-            button("✏️ Описание", f"admin:boost:{product.id}:e:desc"),
+            button("Название", f"admin:boost:{product.id}:e:title", icon="pencil"),
+            button("Описание", f"admin:boost:{product.id}:e:desc", icon="pencil"),
         ],
-        [button("✏️ Цена XTR", f"admin:boost:{product.id}:e:price"), param],
-        [button("🚀 Бусты", "admin:boosts")],
+        [button("Цена XTR", f"admin:boost:{product.id}:e:price", icon="pencil"), param],
+        [button("Бусты", "admin:boosts", icon="boost")],
     )
 
 
 def boost_kinds() -> InlineKeyboardMarkup:
     return markup(
-        [button("Пак внутренних Stars", f"admin:boost:new:{BoostKind.STARS_PACK.value}")],
-        [button("Множитель на время", f"admin:boost:new:{BoostKind.MULTIPLIER.value}")],
-        [button("Отмена", "admin:boosts")],
+        [button("Пак внутренних Stars", f"admin:boost:new:{BoostKind.STARS_PACK.value}", icon="star")],
+        [button("Множитель на время", f"admin:boost:new:{BoostKind.MULTIPLIER.value}", icon="boost")],
+        [button("Отмена", "admin:boosts", icon="cross")],
     )
 
 
@@ -331,21 +411,27 @@ def promo_home(items: Sequence[PromoCode], page: int, total: int) -> InlineKeybo
     rows = [
         [
             button(
-                f"{'🟢' if p.is_active else '⚪'} {p.code} · +{p.reward}⭐ · {p.uses}", f"admin:promo:{p.id}"
+                f"{p.code} · +{p.reward} · {p.uses}",
+                f"admin:promo:{p.id}",
+                icon="ok_green" if p.is_active else "off",
             )
         ]
         for p in items
     ]
     rows.append(pager("admin:promo:list", page, total, PAGE_SIZE))
-    rows.append([button("➕ Новый промокод", "admin:promo:new"), button(BACK, "admin:home")])
+    rows.append([button("Новый промокод", "admin:promo:new", icon="plus"), _back()])
     return markup(*rows)
 
 
 def promo_card(promo: PromoCode) -> InlineKeyboardMarkup:
-    toggle = "⚪ Выключить" if promo.is_active else "🟢 Включить"
+    toggle = "Выключить" if promo.is_active else "Включить"
+    toggle_icon = "off" if promo.is_active else "ok_green"
     return markup(
-        [button(toggle, f"admin:promo:{promo.id}:tg"), button("🗑 Удалить", f"admin:promo:{promo.id}:del")],
-        [button("🎟 Промокоды", "admin:promo:list:0")],
+        [
+            button(toggle, f"admin:promo:{promo.id}:tg", icon=toggle_icon),
+            button("Удалить", f"admin:promo:{promo.id}:del", icon="trash"),
+        ],
+        [button("Промокоды", "admin:promo:list:0", icon="promo")],
     )
 
 
@@ -356,31 +442,35 @@ def payments_home(items: Sequence[Payment], page: int, total: int) -> InlineKeyb
     rows = [
         [
             button(
-                f"{'↩️' if p.status == 'refunded' else '✅'} #{p.id} · {p.xtr_amount} XTR · {p.user_id}",
+                f"#{p.id} · {p.xtr_amount} XTR · {p.user_id}",
                 f"admin:pay:view:{p.id}",
+                icon="undo" if p.status == "refunded" else "check",
             )
         ]
         for p in items
     ]
     rows.append(pager("admin:pay", page, total, PAGE_SIZE))
-    rows.append([button(BACK, "admin:home")])
+    rows.append([_back()])
     return markup(*rows)
 
 
 def payment_card(payment: Payment) -> InlineKeyboardMarkup:
     rows = []
     if payment.status != "refunded":
-        rows.append([button("↩️ Вернуть платёж", f"admin:pay:refund:{payment.id}")])
+        rows.append([button("Вернуть платёж", f"admin:pay:refund:{payment.id}", icon="undo")])
     rows.append(
-        [button("👤 Пользователь", f"admin:u:{payment.user_id}"), button("💳 Платежи", "admin:pay:0")]
+        [
+            button("Пользователь", f"admin:u:{payment.user_id}", icon="profile"),
+            button("Платежи", "admin:pay:0", icon="payments"),
+        ]
     )
     return markup(*rows)
 
 
 def refund_confirm(payment_id: int) -> InlineKeyboardMarkup:
     return markup(
-        [button("✅ Да, вернуть", f"admin:pay:refund:{payment_id}:yes")],
-        [button("Отмена", f"admin:pay:view:{payment_id}")],
+        [button("Да, вернуть", f"admin:pay:refund:{payment_id}:yes", icon="check")],
+        [button("Отмена", f"admin:pay:view:{payment_id}", icon="cross")],
     )
 
 
@@ -391,13 +481,13 @@ def settings_home() -> InlineKeyboardMarkup:
     rows = []
     row = []
     for key in RUNTIME_OVERRIDABLE:
-        row.append(button(RUNTIME_SETTING_LABELS.get(key, key)[:30], f"admin:set:{key}"))
+        row.append(button(RUNTIME_SETTING_LABELS.get(key, key)[:30], f"admin:set:{key}", icon="settings"))
         if len(row) == 2:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
-    rows.append([button(BACK, "admin:home")])
+    rows.append([_back()])
     return markup(*rows)
 
 
@@ -405,29 +495,34 @@ def setting_edit(key: str, overridden: bool, is_bool: bool) -> InlineKeyboardMar
     rows = []
     if is_bool:
         rows.append(
-            [button("🟢 Включить", f"admin:set:{key}:on"), button("⚪ Выключить", f"admin:set:{key}:off")]
+            [
+                button("Включить", f"admin:set:{key}:on", icon="ok_green"),
+                button("Выключить", f"admin:set:{key}:off", icon="off"),
+            ]
         )
     if overridden:
-        rows.append([button("↩️ Сбросить к .env", f"admin:set:{key}:reset")])
-    rows.append([button("⚙️ Настройки", "admin:set")])
+        rows.append([button("Сбросить к .env", f"admin:set:{key}:reset", icon="undo")])
+    rows.append([button("Настройки", "admin:set", icon="settings")])
     return markup(*rows)
 
 
 def providers(states: dict[str, bool]) -> InlineKeyboardMarkup:
     rows = [
-        [button(f"{'🟢' if states.get(name) else '⚪'} {PROVIDER_TITLES[name]}", f"admin:prov:tg:{name}")]
+        [button(PROVIDER_TITLES[name], f"admin:prov:tg:{name}", icon="ok_green" if states.get(name) else "off")]
         for name in CASCADE
     ]
-    rows.append([button(BACK, "admin:home")])
+    rows.append([_back()])
     return markup(*rows)
 
 
 def admins(rows_db: Sequence[Admin], can_manage: bool) -> InlineKeyboardMarkup:
     rows = []
     if can_manage:
-        rows.extend([[button(f"🗑 Удалить {row.user_id}", f"admin:adm:del:{row.user_id}")] for row in rows_db])
-        rows.append([button("➕ Добавить админа", "admin:adm:add")])
-    rows.append([button(BACK, "admin:home")])
+        rows.extend(
+            [[button(f"Удалить {row.user_id}", f"admin:adm:del:{row.user_id}", icon="trash")] for row in rows_db]
+        )
+        rows.append([button("Добавить админа", "admin:adm:add", icon="plus")])
+    rows.append([_back()])
     return markup(*rows)
 
 
@@ -435,13 +530,19 @@ def admins(rows_db: Sequence[Admin], can_manage: bool) -> InlineKeyboardMarkup:
 
 
 def audit(page: int, total: int) -> InlineKeyboardMarkup:
-    return markup(pager("admin:audit", page, total, PAGE_SIZE), [button(BACK, "admin:home")])
+    return markup(pager("admin:audit", page, total, PAGE_SIZE), [_back()])
 
 
 def data_home() -> InlineKeyboardMarkup:
     return markup(
-        [button("⬇️ Пользователи CSV", "admin:exp:users"), button("⬇️ Выводы CSV", "admin:exp:wd")],
-        [button("⬇️ Леджер CSV", "admin:exp:ledger"), button("⬇️ Платежи CSV", "admin:exp:pay")],
-        [button("⬆️ Импорт пользователей", "admin:import")],
-        [button(BACK, "admin:home")],
+        [
+            button("Пользователи CSV", "admin:exp:users", icon="download"),
+            button("Выводы CSV", "admin:exp:wd", icon="download"),
+        ],
+        [
+            button("Леджер CSV", "admin:exp:ledger", icon="download"),
+            button("Платежи CSV", "admin:exp:pay", icon="download"),
+        ],
+        [button("Импорт пользователей", "admin:import", icon="upload")],
+        [_back()],
     )

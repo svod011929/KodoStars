@@ -39,6 +39,7 @@ def settings() -> Settings:
         referral_l1_bonus=10,
         referral_l2_bonus=3,
         min_referral_activity=2,
+        referral_min_piarflow_subs=0,
         signup_bonus=0,
         claim_cooldown_seconds=0,
     )
@@ -103,6 +104,7 @@ async def harness() -> AsyncIterator[BotHarness]:
         throttle_seconds=0,
         piarflow_enabled=False,
         withdraw_cooldown_hours=0,
+        referral_min_piarflow_subs=0,
     )
     engine = create_engine(settings)
     async with engine.begin() as conn:

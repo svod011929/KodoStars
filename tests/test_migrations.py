@@ -61,7 +61,7 @@ async def test_fresh_upgrade_matches_create_all(tmp_path: Path) -> None:
 
     assert migrated == created
     assert migrated_indexes == created_indexes
-    assert version == "0005_piarflow_fragment"
+    assert version == "0006_piarflow_paid_subs"
 
 
 @pytest.mark.asyncio

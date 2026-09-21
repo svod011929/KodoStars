@@ -25,10 +25,12 @@ class OpResult:
     fail_open: bool = False
     message: str = ""
     sponsors: list[Sponsor] = field(default_factory=list)
+    # PiarFlow links with status ``subscribed`` (reward credited by the integration).
+    paid_links: list[str] = field(default_factory=list)
 
     @classmethod
-    def ok(cls, provider: str, message: str = "") -> OpResult:
-        return cls(allowed=True, provider=provider, message=message)
+    def ok(cls, provider: str, message: str = "", *, paid_links: list[str] | None = None) -> OpResult:
+        return cls(allowed=True, provider=provider, message=message, paid_links=list(paid_links or []))
 
     @classmethod
     def blocked(
@@ -36,8 +38,16 @@ class OpResult:
         provider: str,
         sponsors: list[Sponsor],
         message: str = "",
+        *,
+        paid_links: list[str] | None = None,
     ) -> OpResult:
-        return cls(allowed=False, provider=provider, sponsors=sponsors, message=message)
+        return cls(
+            allowed=False,
+            provider=provider,
+            sponsors=sponsors,
+            message=message,
+            paid_links=list(paid_links or []),
+        )
 
     @classmethod
     def skip(cls, provider: str, reason: str) -> OpResult:

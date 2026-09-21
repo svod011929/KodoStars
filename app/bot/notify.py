@@ -9,6 +9,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.bot import emoji as pe
 from app.bot import texts
 from app.bot.admin import keyboards as admin_keyboards
 from app.bot.admin import texts as admin_texts
@@ -42,7 +43,7 @@ class Notifier:
 
     async def _send(self, chat_id: int, text: str, **kwargs: Any) -> None:
         try:
-            await self._bot.send_message(chat_id, text, disable_web_page_preview=True, **kwargs)
+            await self._bot.send_message(chat_id, pe.premiumize(text), disable_web_page_preview=True, **kwargs)
         except TelegramAPIError as exc:
             log.info("notify_send_failed", chat_id=chat_id, error=str(exc))
 

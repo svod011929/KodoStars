@@ -9,6 +9,7 @@ from app.services import events, ledger
 from app.services.antifraud import record_event
 from app.services.devices import is_device_ok, referral_blocked_by_twink
 from app.services.levels import XP_REFERRAL_L1, XP_REFERRAL_L2, add_xp, apply_multipliers, info_for_xp
+from app.services.piarflow_quality import paid_sub_count
 
 
 def parse_ref_payload(payload: str | None) -> int | None:
@@ -126,6 +127,10 @@ async def activate_if_ready(
     # Both conditions are reversible (verification later / admin trust), so nothing is
     # marked as credited here — the next activity simply re-evaluates.
     if not is_device_ok(user, settings) or referral_blocked_by_twink(user, settings):
+        return []
+    # Traffic quality: PiarFlow must have credited ≥N paid subscriptions for this user.
+    needed = max(int(settings.referral_min_piarflow_subs), 0)
+    if needed and await paid_sub_count(session, user.id) < needed:
         return []
 
     user.referral_activated = True

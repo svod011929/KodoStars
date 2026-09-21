@@ -1,14 +1,11 @@
 """PiarFlow OP adapter — https://piarflow.com/api-docs
 
-* ``POST /sponsors`` (``Authorization: Bearer <api key>``) with ``user_id``,
-  ``chat_id``, ``max_sponsors`` and — for bots connected without a token — the
-  profile fields ``first_name`` / ``username`` / ``language_code`` / ``bio``
-  (``null`` when unknown). Returns ``sponsors[] = {link, status, price}``.
-* ``POST /sponsors/check`` with ``user_id`` and the ``links`` shown to the user.
+* ``POST /sponsors`` / ``POST /sponsors/check``
+* Statuses: ``subscribed`` — done and paid by PiarFlow; ``not_counted`` — done but
+  unpaid; ``unsubscribed`` — pending.
 
-Statuses: ``subscribed`` — done, ``not_counted`` — done but not paid (still done
-from the user's point of view), ``unsubscribed`` — pending. HTTP 404 means "no
-tasks" → pass. 401/429/5xx/transport → fail-open.
+Paid (``subscribed``) links are returned on ``OpResult.paid_links`` so the bot can
+gate referral bonuses on real monetized traffic quality.
 """
 
 from __future__ import annotations
@@ -20,6 +17,7 @@ from app.op.base import BoundedCache, OpContext, OpResult, Sponsor, title_from_l
 from app.op.http import as_dict, as_list, post_json
 
 DONE_STATUSES = frozenset({"subscribed", "not_counted"})
+PAID_STATUS = "subscribed"
 
 
 class PiarFlowAdapter:
@@ -67,11 +65,18 @@ class PiarFlowAdapter:
         data = as_dict(payload)
         if status >= 400 or data.get("status") == "error":
             return OpResult.fail_open_result(self.name, str(data.get("message") or status))
-        sponsors = _pending(as_list(data))
+        items = as_list(data)
+        paid = _paid_links(items)
+        sponsors = _pending(items)
         self._links.set(user.user_id, [item.url for item in sponsors])
         if not sponsors:
-            return OpResult.ok(self.name)
-        return OpResult.blocked(self.name, sponsors, "Выполните задания PiarFlow и нажмите «Я подписался».")
+            return OpResult.ok(self.name, paid_links=paid)
+        return OpResult.blocked(
+            self.name,
+            sponsors,
+            "Выполните задания PiarFlow и нажмите «Я подписался».",
+            paid_links=paid,
+        )
 
     async def verify(self, user: OpContext) -> OpResult:
         if not self._ready():
@@ -94,11 +99,32 @@ class PiarFlowAdapter:
         data = as_dict(payload)
         if status >= 400 or data.get("status") == "error":
             return OpResult.fail_open_result(self.name, str(data.get("message") or status))
-        remaining = _pending(as_list(data))
+        items = as_list(data)
+        paid = _paid_links(items)
+        remaining = _pending(items)
         if remaining:
-            return OpResult.blocked(self.name, remaining, "Ещё не все задания выполнены.")
+            return OpResult.blocked(
+                self.name, remaining, "Ещё не все задания выполнены.", paid_links=paid
+            )
         self._links.pop(user.user_id)
-        return OpResult.ok(self.name)
+        return OpResult.ok(self.name, paid_links=paid)
+
+
+def _paid_links(items: list[Any]) -> list[str]:
+    """Links where PiarFlow credited the traffic sale (``subscribed``)."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("link") or "").strip()
+        if not url or url in seen:
+            continue
+        if str(item.get("status") or "").lower() != PAID_STATUS:
+            continue
+        seen.add(url)
+        result.append(url)
+    return result
 
 
 def _pending(items: list[Any]) -> list[Sponsor]:
