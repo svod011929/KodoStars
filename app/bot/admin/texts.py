@@ -489,6 +489,16 @@ def withdrawal_cancelled_alert(wd: Withdrawal, name: str) -> str:
     return f"↩️ Заявка #{wd.id} на {h(wd.gift_label)} отменена пользователем {h(name)}."
 
 
+def payout_log_post(wd: Withdrawal, user: User) -> str:
+    """Public channel post when a withdrawal is marked sent."""
+    uname = f"@{user.username}" if user.username else "без @username"
+    return (
+        f"💸 <b>Выплата #{wd.id}</b>\n"
+        f"{h(user.display_name)} · {uname} · <code>{user.id}</code>\n"
+        f"{h(wd.gift_label)}"
+    )
+
+
 def reject_reason_prompt(wd: Withdrawal) -> str:
     return (
         f"Причина отклонения заявки #{wd.id} ({h(wd.gift_label)}). "

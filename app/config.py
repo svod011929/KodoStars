@@ -49,6 +49,7 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "botohub_views_token": str,
     "botohub_views_cooldown_seconds": int,
     "botohub_views_api_url": str,
+    "payout_log_chat_id": int,
 }
 
 RUNTIME_SETTING_LABELS: dict[str, str] = {
@@ -89,6 +90,7 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "botohub_views_token": "BotoHub Views: API-токен",
     "botohub_views_cooldown_seconds": "BotoHub Views: пауза между показами, с",
     "botohub_views_api_url": "BotoHub Views: URL SendPost",
+    "payout_log_chat_id": "Канал выплат (chat_id, 0 = выкл)",
 }
 
 # Compact admin settings hubs — every RUNTIME_OVERRIDABLE key must appear once.
@@ -117,6 +119,7 @@ SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
         "withdraw_max",
         "withdraw_cooldown_hours",
         "withdraw_min_referrals",
+        "payout_log_chat_id",
     ),
     "antifraud": (
         "device_check_enabled",
@@ -206,6 +209,8 @@ class Settings(BaseSettings):
     withdraw_enabled: bool = True
     signup_bonus: int = 5
     claim_cooldown_seconds: int = 3
+    # Public log channel for completed payouts (Telegram chat id, e.g. -100…). 0 = off.
+    payout_log_chat_id: int = 0
 
     # Web server (Telegram Mini App + PiarFlow unsubscribe webhook).
     web_public_url: str = ""

@@ -266,13 +266,33 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness, monkey
         assert wd.status == WithdrawalStatus.SENT.value
         assert wd.gift_id == "g50"
     assert await _balance(h, USER_ID) == 55
+    # No payout log channel configured → nothing posted to a channel chat.
+    assert not any(m.chat_id < 0 for m in h.tg.sent(SendMessage))
 
-    # A second request can be cancelled by the user and Stars come back.
+    # Enable log channel and confirm a second payout lands there.
+    LOG_CHAT = -1001234567890
+    await h.feed(callback_update(ADMIN_ID, "admin:set:payout_log_chat_id"))
+    await h.feed(message_update(ADMIN_ID, str(LOG_CHAT)))
+    assert "Сохранено" in h.tg.last_text(ADMIN_ID)
+    async with h.factory() as session:
+        await ledger.credit(session, user_id=USER_ID, amount=50, kind=LedgerKind.TASK)
+        await session.commit()
     await h.feed(callback_update(USER_ID, "wd:g:g50"))
-    assert await _balance(h, USER_ID) == 5
-    await h.feed(callback_update(USER_ID, "wd:list"))
-    await h.feed(callback_update(USER_ID, "wd:cancel:2"))
+    await h.feed(callback_update(ADMIN_ID, "admin:wd:ok:2"))
+    await h.feed(callback_update(ADMIN_ID, "admin:wd:sent:2"))
+    log_posts = [m for m in h.tg.sent(SendMessage) if m.chat_id == LOG_CHAT]
+    assert log_posts, "expected payout log post in configured channel"
+    assert "Выплата #2" in log_posts[-1].text
+
+    # A third request can be cancelled by the user and Stars come back.
+    async with h.factory() as session:
+        await ledger.credit(session, user_id=USER_ID, amount=50, kind=LedgerKind.TASK)
+        await session.commit()
+    await h.feed(callback_update(USER_ID, "wd:g:g50"))
     assert await _balance(h, USER_ID) == 55
+    await h.feed(callback_update(USER_ID, "wd:list"))
+    await h.feed(callback_update(USER_ID, "wd:cancel:3"))
+    assert await _balance(h, USER_ID) == 105
     assert any("отменена пользователем" in text for text in h.tg.texts(ADMIN_ID))
 
 

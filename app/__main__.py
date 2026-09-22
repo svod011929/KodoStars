@@ -66,7 +66,7 @@ async def run() -> None:
         except TelegramAPIError as exc:
             log.warning("get_me_failed", error=str(exc))
 
-    notifier = Notifier(bot, session_factory, access)
+    notifier = Notifier(bot, session_factory, access, settings_store)
     async with session_factory() as session:
         effective = await settings_store.effective(session)
     broadcast_runner = BroadcastRunner(

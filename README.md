@@ -145,7 +145,7 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 | Веб / антитвинк / вебхук | `WEB_PUBLIC_URL`, `SERVER_PORT`, `DEVICE_CHECK_ENABLED`, `DEVICE_CHECK_FOR_OP`, `DEVICE_CHECK_FOR_WITHDRAW`, `TWINK_BLOCK_REFERRAL`, `TWINK_BLOCK_OP`, `TWINK_BLOCK_WITHDRAW`, `TWINK_REQUIRE_IP_MATCH`, `TWINK_IP_WINDOW_DAYS` |
 | БД | `DATABASE_URL` (`sqlite+aiosqlite:///./data/kodostars.db` или `postgresql+asyncpg://…`) |
 | Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, **`REFERRAL_MIN_PIARFLOW_SUBS`**, `NOTIFY_REFERRER`, ежедневка, `SIGNUP_BONUS`, `CLAIM_COOLDOWN_SECONDS`, **`CURRENCY_EMOJI_ID`**, **`CURRENCY_EMOJI_FALLBACK`** |
-| Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS` |
+| Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS`, `PAYOUT_LOG_CHAT_ID` |
 | Операционные | `MAINTENANCE_MODE`, `MAINTENANCE_TEXT`, `BROADCAST_RATE_PER_SEC`, `THROTTLE_SECONDS` |
 | PiarFlow | `PIARFLOW_ENABLED`, `PIARFLOW_API_KEY`, `PIARFLOW_API_URL`, `PIARFLOW_MAX_SPONSORS`, `PIARFLOW_UNSUB_PENALTY` |
 | BotoHub Views | `BOTOHUB_VIEWS_ENABLED`, `BOTOHUB_VIEWS_TOKEN`, `BOTOHUB_VIEWS_COOLDOWN_SECONDS`, опционально `BOTOHUB_VIEWS_API_URL` |
@@ -195,6 +195,10 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
    (`FRAGMENT_WALLET_MNEMONIC` + `FRAGMENT_COOKIES`) и закрывает заявку. Либо отмечает
    **Уже отправил вручную**, если Stars ушли иначе.
 4. **Отклонить** (с причиной) или отмена самим пользователем — холд возвращается на баланс.
+
+Опционально: **`PAYOUT_LOG_CHAT_ID`** — канал, куда бот публикует каждую завершённую выплату
+(статус «отправлено»). Бот должен быть администратором канала. `0` или пусто — выкл.
+Меняется в **Админка → Настройки → Вывод**.
 
 `FRAGMENT_TONAPI_KEY` опционален: без ключа используется публичный Toncenter. С ключом
 (tonconsole.com) надёжнее при нагрузке. Секреты храните только в серверном `.env`.

@@ -121,7 +121,7 @@ async def harness() -> AsyncIterator[BotHarness]:
     async with factory() as db:
         await access.load(db)
     store = RuntimeSettingsStore(settings)
-    notifier = Notifier(bot, factory, access)
+    notifier = Notifier(bot, factory, access, store)
     runner = BroadcastRunner(
         factory,
         sender=make_broadcast_sender(bot),
