@@ -54,7 +54,6 @@ def extract_currency_from_message(message: Message) -> tuple[str | None, str | N
             fallback = text[:8]
 
     return emoji_id, fallback
-_FALSE = {"0", "false", "off", "no", "нет", "выкл", "выключить", "n"}
 
 
 def parse_value(key: str, raw: str) -> Any:
