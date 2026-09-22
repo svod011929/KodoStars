@@ -77,3 +77,56 @@ async def test_effective_terms_takes_max_across_approved_slots(
 
 def test_normalize_invite_link() -> None:
     assert amb.normalize_invite_link(" https://T.ME/Foo/ ") == "https://t.me/foo"
+
+
+@pytest.mark.asyncio
+async def test_submit_approve_claim_daily_and_revoke(session: AsyncSession, settings: Settings) -> None:
+    from app.services.errors import ValidationError
+
+    user = User(id=10, first_name="A")
+    session.add(user)
+    await session.flush()
+
+    slot = await amb.submit_application(
+        session,
+        user=user,
+        kind="channel",
+        title="My Chan",
+        invite_link="https://t.me/MyChan",
+    )
+    assert slot.status == AmbassadorStatus.PENDING.value
+    assert slot.invite_link == "https://t.me/mychan"
+
+    with pytest.raises(ValidationError):
+        await amb.submit_application(
+            session, user=user, kind="channel", title="Dup", invite_link="https://t.me/mychan/"
+        )
+
+    approved = await amb.approve_slot(
+        session,
+        slot_id=slot.id,
+        admin_id=1,
+        l1_bonus=50,
+        l1_percent=30,
+        l2_bonus=7,
+        l2_percent=8,
+        promo_reward=12,
+        promo_max_uses=25,
+    )
+    assert approved.status == AmbassadorStatus.APPROVED.value
+    assert approved.promo_reward == 12
+
+    first = await amb.claim_daily_promo(session, slot_id=slot.id, user_id=10)
+    second = await amb.claim_daily_promo(session, slot_id=slot.id, user_id=10)
+    assert first.id == second.id
+    assert first.code.startswith("AMB")
+    assert first.ambassador_slot_id == slot.id
+    assert first.reward == 12
+    assert first.max_uses == 25
+
+    terms = await amb.effective_referral_terms(session, 10, settings)
+    assert terms.l1_bonus == 50 and terms.l1_percent == 30
+
+    await amb.revoke_slot(session, slot_id=slot.id, admin_id=1)
+    terms2 = await amb.effective_referral_terms(session, 10, settings)
+    assert terms2.l1_bonus == settings.referral_l1_bonus

@@ -25,6 +25,8 @@ async def create_promo(
     max_uses: int = 0,
     expires_at: datetime | None = None,
     created_by: int | None = None,
+    ambassador_slot_id: int | None = None,
+    promo_day_key: str | None = None,
 ) -> PromoCode:
     code = normalize_code(code)
     if not _CODE_RE.match(code):
@@ -43,6 +45,8 @@ async def create_promo(
         expires_at=expires_at,
         is_active=True,
         created_by=created_by,
+        ambassador_slot_id=ambassador_slot_id,
+        promo_day_key=promo_day_key,
     )
     session.add(promo)
     await session.flush()
