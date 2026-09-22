@@ -364,9 +364,12 @@ async def test_runtime_settings_and_maintenance(harness: BotHarness) -> None:
 
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:on"))
     await h.feed(callback_update(USER_ID, "menu:daily"))
-    assert h.settings.maintenance_text[:20] in h.tg.alerts()[-1]
+    from app.bot import brand
+
+    expanded = brand.expand(h.settings.maintenance_text) or h.settings.maintenance_text
+    assert expanded[:20] in h.tg.alerts()[-1]
     await h.feed(message_update(USER_ID, "/menu"))
-    assert h.tg.last_text(USER_ID) == h.settings.maintenance_text
+    assert h.tg.last_text(USER_ID) == expanded
     await h.feed(message_update(ADMIN_ID, "/menu"))
     assert "KodoStars" in h.tg.last_text(ADMIN_ID)
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:reset"))

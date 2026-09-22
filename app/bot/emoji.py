@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+from app.bot import brand
+
 # Default premium glyph for internal Stars currency (overridable at runtime).
 DEFAULT_CURRENCY_ID = "5904462880941545555"
 DEFAULT_CURRENCY_FALLBACK = "⭐"
@@ -190,8 +192,11 @@ def star() -> str:
 
 
 def premiumize(text: str) -> str:
-    """Replace known unicode emoji in a message with ``<tg-emoji>`` tags."""
-    if not text or "<tg-emoji" in text:
+    """Expand ``{bot}`` and replace known unicode emoji with ``<tg-emoji>`` tags."""
+    if not text:
+        return text
+    text = brand.expand(text) or text
+    if "<tg-emoji" in text:
         return text
     out = text
     # Currency glyphs → live override (placeholder avoids re-matching fallback inside the tag).

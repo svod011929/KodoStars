@@ -27,6 +27,7 @@ from aiohttp import web
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import __version__
+from app.bot import brand
 from app.config import Settings
 from app.db.models import User
 from app.services import devices, events, referrals
@@ -131,14 +132,17 @@ class WebServer:
     # --- handlers ---------------------------------------------------------------------
 
     async def landing(self, request: web.Request) -> web.Response:
-        html = LANDING_PAGE.replace("{username}", self._bot_username)
+        html = LANDING_PAGE.replace("{username}", self._bot_username).replace(
+            "{bot}", brand.bot_name()
+        )
         return web.Response(text=html, content_type="text/html", charset="utf-8")
 
     async def health(self, request: web.Request) -> web.Response:
         return web.json_response({"status": "ok", "version": __version__})
 
     async def verify_page(self, request: web.Request) -> web.Response:
-        return web.Response(text=VERIFY_PAGE, content_type="text/html", charset="utf-8")
+        html = VERIFY_PAGE.replace("{bot}", brand.bot_name())
+        return web.Response(text=html, content_type="text/html", charset="utf-8")
 
     async def api_device(self, request: web.Request) -> web.Response:
         ip = client_ip(request)

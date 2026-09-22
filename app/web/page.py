@@ -11,7 +11,7 @@ VERIFY_PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>KodoStars · проверка устройства</title>
+<title>{bot} · проверка устройства</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   :root { color-scheme: light dark; }
@@ -121,9 +121,9 @@ VERIFY_PAGE = """<!doctype html>
 
 LANDING_PAGE = """<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KodoStars</title>
+<title>{bot}</title>
 <style>body{font-family:system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;background:#0d1117;color:#e6edf3}
 a{color:#34d399}.c{text-align:center;padding:32px}</style></head>
-<body><div class="c"><h1>⭐ KodoStars</h1><p>Telegram-бот: рефералы, ежедневки, задания и Stars.</p>
+<body><div class="c"><h1>⭐ {bot}</h1><p>Telegram-бот: рефералы, ежедневки, задания и Stars.</p>
 <p><a href="https://t.me/{username}">Открыть бота @{username}</a></p></div></body></html>
 """

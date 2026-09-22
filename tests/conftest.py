@@ -9,6 +9,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from app.bot import brand
 from app.bot.factory import create_dispatcher, make_broadcast_sender
 from app.bot.notify import Notifier
 from app.config import Settings
@@ -90,6 +91,7 @@ class BotHarness:
         self.tg.fail_refunds = False
         self.tg.fail_send_gift = False
         gifts_service.invalidate_cache()
+        brand.apply_bot_name("KodoStars")
 
 
 @pytest_asyncio.fixture(scope="module", loop_scope="module")
@@ -114,6 +116,7 @@ async def harness() -> AsyncIterator[BotHarness]:
         await seed_catalog(db)
 
     bot, tg = make_bot()
+    brand.apply_bot_name("KodoStars")
     access = AccessRegistry(settings.admin_ids)
     async with factory() as db:
         await access.load(db)

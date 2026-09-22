@@ -67,7 +67,7 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "op_cache_sec": "ОП: кэш проверки, с",
     "support_contact": "Контакт поддержки (@username)",
     "maintenance_mode": "Режим обслуживания",
-    "maintenance_text": "Текст режима обслуживания",
+    "maintenance_text": "Текст обслуживания (плейсхолдер {bot})",
     "broadcast_rate_per_sec": "Рассылка: сообщений в секунду",
     "notify_referrer": "Уведомлять реферера о новых рефералах",
     "device_check_enabled": "Антитвинк: проверка устройства (Mini App)",
@@ -134,7 +134,7 @@ class Settings(BaseSettings):
 
     support_contact: str = ""
     maintenance_mode: bool = False
-    maintenance_text: str = "Бот на техническом обслуживании. Загляните чуть позже."
+    maintenance_text: str = "{bot} на техническом обслуживании. Загляните чуть позже."
     broadcast_rate_per_sec: int = 20
     throttle_seconds: float = 0.4
 

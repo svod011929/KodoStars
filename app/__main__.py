@@ -8,6 +8,7 @@ import structlog
 from aiogram.exceptions import TelegramAPIError, TelegramUnauthorizedError
 
 from app import __version__
+from app.bot import brand
 from app.bot.commands import setup_commands
 from app.bot.factory import create_bot, create_dispatcher, make_broadcast_sender
 from app.bot.notify import Notifier
@@ -55,6 +56,7 @@ async def run() -> None:
         try:
             me = await bot.get_me()
             bot_username = me.username or bot_username
+            brand.apply_bot_name(me.first_name)
         except TelegramUnauthorizedError:
             log.error("telegram_unauthorized", hint="BOT_TOKEN неверный. Процесс ждёт исправления токена.")
             await bot.session.close()

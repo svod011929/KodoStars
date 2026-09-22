@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from app.bot import brand
 from app.bot import emoji as pe
 from app.bot.utils import button, fmt_dt, fmt_duration, fmt_signed, h, markup
 from app.config import Settings
@@ -37,7 +38,20 @@ class _CurrencyGlyph:
         return format(str(self), spec)
 
 
+class _BotNameGlyph:
+    """Resolves to the live Telegram bot display name on every stringify."""
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        return brand.bot_name()
+
+    def __format__(self, spec: str) -> str:
+        return format(str(self), spec)
+
+
 STAR = _CurrencyGlyph()  # premium Stars glyph (admin-overridable)
+BOT = _BotNameGlyph()  # BotFather title (set from get_me at startup)
 
 
 def home(
@@ -63,7 +77,7 @@ def home(
         boost_line += f" · буст {boost}" + (f" до {boost_until}" if boost_until else "")
     notice = f"\n\n{device_notice}" if device_notice else ""
     return (
-        f"{STAR} <b>KodoStars</b>\n"
+        f"{STAR} <b>{BOT}</b>\n"
         f"Привет, {h(user.first_name or 'друг')}!\n\n"
         f"Баланс: <b>{balance} {STAR}</b>{hold}\n"
         f"{level_line}\n"
@@ -236,7 +250,7 @@ def referrals(
 
 def share_text(link: str, signup_bonus: int) -> str:
     bonus = f" Бонус {signup_bonus} ⭐ за старт!" if signup_bonus else ""
-    return f"Зарабатывай Telegram Stars за друзей и ежедневки в KodoStars.{bonus} {link}"
+    return f"Зарабатывай Telegram Stars за друзей и ежедневки в {BOT}.{bonus} {link}"
 
 
 def daily_screen(preview: DailyPreview, settings: Settings) -> str:

@@ -5,6 +5,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import CallbackQuery, Message, TelegramObject
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import brand
 from app.bot import emoji as pe
 from app.bot.middlewares.events import unwrap_event
 from app.services.access import AccessRegistry
@@ -42,10 +43,11 @@ class RuntimeMiddleware(BaseMiddleware):
 
         settings = data["settings"]
         if settings.maintenance_mode and not is_admin:
+            notice = brand.expand(settings.maintenance_text) or settings.maintenance_text
             if isinstance(inner, Message):
-                await inner.answer(settings.maintenance_text)
+                await inner.answer(notice)
                 return None
             if isinstance(inner, CallbackQuery):
-                await inner.answer(settings.maintenance_text[:190], show_alert=True)
+                await inner.answer(notice[:190], show_alert=True)
                 return None
         return await handler(event, data)
