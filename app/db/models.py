@@ -130,6 +130,33 @@ class AdminRole(StrEnum):
     ADMIN = "admin"
 
 
+class AmbassadorKind(StrEnum):
+    CHANNEL = "channel"
+    CHAT = "chat"
+    BOT = "bot"
+
+
+class AmbassadorStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    REVOKED = "revoked"
+
+
+AMBASSADOR_KIND_LABELS: dict[str, str] = {
+    AmbassadorKind.CHANNEL.value: "Канал",
+    AmbassadorKind.CHAT.value: "Чат",
+    AmbassadorKind.BOT.value: "Бот",
+}
+
+AMBASSADOR_STATUS_LABELS: dict[str, str] = {
+    AmbassadorStatus.PENDING.value: "На проверке",
+    AmbassadorStatus.APPROVED.value: "Одобрен",
+    AmbassadorStatus.REJECTED.value: "Отклонён",
+    AmbassadorStatus.REVOKED.value: "Отозван",
+}
+
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
@@ -463,8 +490,38 @@ class Broadcast(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AmbassadorSlot(Base):
+    __tablename__ = "ambassador_slots"
+    __table_args__ = (Index("ix_ambassador_slots_user_status", "user_id", "status"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    title: Mapped[str] = mapped_column(String(128))
+    invite_link: Mapped[str] = mapped_column(String(512))
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default=AmbassadorStatus.PENDING.value, index=True)
+    l1_bonus: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    l1_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    l2_bonus: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    l2_percent: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    promo_reward: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    promo_max_uses: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    promo_auto_post: Mapped[bool] = mapped_column(Boolean, default=False)
+    reviewed_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class PromoCode(Base):
     __tablename__ = "promo_codes"
+    __table_args__ = (
+        UniqueConstraint("ambassador_slot_id", "promo_day_key", name="uq_ambassador_promo_day"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     code: Mapped[str] = mapped_column(String(32), unique=True)
@@ -474,6 +531,10 @@ class PromoCode(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    ambassador_slot_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("ambassador_slots.id"), nullable=True, index=True
+    )
+    promo_day_key: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
