@@ -62,7 +62,12 @@ def home(version: str, pending: int, running_broadcast: bool, maintenance: bool)
     )
 
 
-def stats(d: Dashboard, star_balance: int | None, days: Sequence[tuple[str, int]]) -> str:
+def stats(
+    d: Dashboard,
+    star_balance: int | None,
+    days: Sequence[tuple[str, int]],
+    pf=None,
+) -> str:
     kinds = "\n".join(
         f"   • {h(LEDGER_KIND_LABELS.get(kind, kind))}: {total}"
         for kind, total in sorted(d.credited_by_kind.items(), key=lambda kv: -kv[1])
@@ -71,6 +76,13 @@ def stats(d: Dashboard, star_balance: int | None, days: Sequence[tuple[str, int]
     last_bc = f"#{lb.id} · {lb.status} · {lb.sent}/{lb.total} · {fmt_ago(lb.created_at)}" if lb else "—"
     star_line = f"\n💫 Баланс Stars бота: <b>{star_balance}</b> XTR" if star_balance is not None else ""
     spark = " ".join(f"{day[5:]}:{count}" for day, count in days) or "—"
+    pf_line = ""
+    if pf is not None:
+        pf_line = (
+            f"\n\n📣 PiarFlow: выдано {pf.issued_total} (сегодня {pf.issued_today}) · "
+            f"засчитано {pf.credited_total} (сегодня {pf.credited_today}) · "
+            f"конверсия {pf.conversion_pct:.0f}%"
+        )
     return (
         "📊 <b>Статистика</b>\n\n"
         f"👥 Пользователи: <b>{d.users_total}</b> "
@@ -93,7 +105,56 @@ def stats(d: Dashboard, star_balance: int | None, days: Sequence[tuple[str, int]
         f"🎟 промо: {d.promo_redemptions}\n"
         f"🛡 Устройство подтвердили: {d.device_verified} · 👯 твинков: {d.twinks}\n"
         f"📣 Последняя рассылка: {last_bc}"
+        f"{pf_line}"
     )
+
+
+def piarflow_traffic(t) -> str:
+    return (
+        "📊 <b>PiarFlow · трафик</b>\n\n"
+        f"📤 Выдано спонсоров (уник. user+link): <b>{t.issued_total}</b>\n"
+        f"   сегодня {t.issued_today} · 7 дн {t.issued_7d} · показов всего {t.shows_total}\n"
+        f"   уникальных пользователей: {t.unique_users_issued}\n\n"
+        f"✅ Засчитано (subscribed): <b>{t.credited_total}</b>\n"
+        f"   сегодня {t.credited_today} · 7 дн {t.credited_7d}\n"
+        f"   уникальных пользователей: {t.unique_users_credited}\n\n"
+        f"📈 Конверсия выдача→зачёт: <b>{t.conversion_pct:.1f}%</b>\n"
+        f"↩️ Отписок (вебхук): {t.unsubs_total} (сегодня {t.unsubs_today})"
+    )
+
+
+def piarflow_issued_list(rows, names: dict[int, str], page: int, total: int, page_size: int) -> str:
+    lines = ["📤 <b>Выданные спонсоры</b>", ""]
+    if not rows:
+        lines.append("Пока пусто — задания ещё не выдавались.")
+    for row in rows:
+        name = h(names.get(row.user_id, str(row.user_id)))
+        link = h(row.offer_link[:48] + ("…" if len(row.offer_link) > 48 else ""))
+        lines.append(
+            f"• <code>{row.user_id}</code> {name}\n"
+            f"  {link}\n"
+            f"  показов {row.show_count} · последний {fmt_ago(row.last_shown_at)}"
+        )
+    pages = max((total + page_size - 1) // page_size, 1)
+    lines += ["", f"Страница {page + 1}/{pages} · всего {total}"]
+    return "\n".join(lines)
+
+
+def piarflow_credited_list(rows, names: dict[int, str], page: int, total: int, page_size: int) -> str:
+    lines = ["✅ <b>Засчитанные подписки</b>", ""]
+    if not rows:
+        lines.append("Пока пусто — PiarFlow ещё не засчитал subscribed.")
+    for row in rows:
+        name = h(names.get(row.user_id, str(row.user_id)))
+        link = h(row.offer_link[:48] + ("…" if len(row.offer_link) > 48 else ""))
+        lines.append(
+            f"• <code>{row.user_id}</code> {name}\n"
+            f"  {link}\n"
+            f"  {fmt_ago(row.created_at)}"
+        )
+    pages = max((total + page_size - 1) // page_size, 1)
+    lines += ["", f"Страница {page + 1}/{pages} · всего {total}"]
+    return "\n".join(lines)
 
 
 def reconcile(rows: Sequence[tuple[int, int, int]]) -> str:
@@ -724,6 +785,7 @@ def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
         "Единственный провайдер обязательной подписки. "
         "Ошибки API — fail-open (не блокируют пользователей).",
         "Вебхук отписок: <code>/api/piarflow/webhook</code> на вашем HTTPS.",
+        "Статистика выданных и засчитанных спонсоров — кнопки ниже.",
         "",
     ]
     for name in CASCADE:

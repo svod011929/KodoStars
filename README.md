@@ -221,6 +221,9 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 | Ошибка API | fail-open |
 
 Админ может выключить PiarFlow в рантайме (таблица `provider_states`).
+В **Админка → PiarFlow** и **Статистика → PiarFlow трафик** — выданные спонсоры,
+засчитанные (`subscribed`) и конверсия; списки с пагинацией.
+Учёт: `piarflow_issued_subs` (выдача) и `piarflow_paid_subs` (зачёт).
 
 ### Вебхук отписок
 
@@ -247,14 +250,15 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 ## Миграции
 
 Схема управляется Alembic (`app/migrations`). При старте бот сам приводит БД к актуальной ревизии
-(сейчас head — `0006_piarflow_paid_subs`):
+(сейчас head — `0007_piarflow_issued_subs`):
 
 - пустая БД → создаётся с нуля;
 - БД от версии 0.1 (`create_all`, без `alembic_version`) → штампуется `0001_baseline` и обновляется;
 - иначе — обычный `upgrade head`.
 
 Ключевые ревизии после 1.1.0: `0005_piarflow_fragment` (вебхук отписок),
-`0006_piarflow_paid_subs` (учёт оплаченных подписок для рефералки).
+`0006_piarflow_paid_subs` (учёт оплаченных подписок для рефералки),
+`0007_piarflow_issued_subs` (учёт выданных спонсоров для статистики).
 
 ```bash
 alembic current
@@ -302,7 +306,7 @@ app/
   op/                    # OpGate + адаптер piarflow
   web/                   # Mini App + /api/device + /api/piarflow/webhook
   db/                    # models, session, seed, migrate
-  migrations/            # Alembic env + versions (…0006_piarflow_paid_subs)
+  migrations/            # Alembic env + versions (…0007_piarflow_issued_subs)
 tests/
 docs/superpowers/specs/
 ```

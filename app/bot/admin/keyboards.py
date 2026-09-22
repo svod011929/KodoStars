@@ -49,6 +49,7 @@ def back_home(*rows: list) -> InlineKeyboardMarkup:
 def stats() -> InlineKeyboardMarkup:
     return markup(
         [button("Обновить", "admin:stats", icon="refresh"), button("Сверка балансов", "admin:reconcile", icon="code")],
+        [button("PiarFlow трафик", "admin:pf:stats", icon="megaphone")],
         [_back()],
     )
 
@@ -511,8 +512,33 @@ def providers(states: dict[str, bool]) -> InlineKeyboardMarkup:
         [button(PROVIDER_TITLES[name], f"admin:prov:tg:{name}", icon="ok_green" if states.get(name) else "off")]
         for name in CASCADE
     ]
+    rows.append(
+        [
+            button("Трафик", "admin:pf:stats", icon="stats"),
+            button("Выданные", "admin:pf:issued:0", icon="upload"),
+        ]
+    )
+    rows.append([button("Засчитанные", "admin:pf:credited:0", icon="check")])
     rows.append([_back()])
     return markup(*rows)
+
+
+def piarflow_stats() -> InlineKeyboardMarkup:
+    return markup(
+        [
+            button("Выданные", "admin:pf:issued:0", icon="upload"),
+            button("Засчитанные", "admin:pf:credited:0", icon="check"),
+        ],
+        [button("Обновить", "admin:pf:stats", icon="refresh"), button("PiarFlow", "admin:prov", icon="lock")],
+    )
+
+
+def piarflow_list(kind: str, page: int, total: int) -> InlineKeyboardMarkup:
+    prefix = f"admin:pf:{kind}"
+    return markup(
+        pager(prefix, page, total, PAGE_SIZE),
+        [button("Трафик", "admin:pf:stats", icon="stats"), button("PiarFlow", "admin:prov", icon="lock")],
+    )
 
 
 def admins(rows_db: Sequence[Admin], can_manage: bool) -> InlineKeyboardMarkup:

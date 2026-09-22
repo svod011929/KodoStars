@@ -7,6 +7,7 @@ from app.bot.admin import (
     data,
     home,
     payments,
+    piarflow,
     promo,
     settings,
     users,
@@ -28,6 +29,7 @@ def build_admin_router() -> Router:
         promo,
         payments,
         settings,
+        piarflow,
         admins,
         data,
     ):
