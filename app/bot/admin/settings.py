@@ -179,7 +179,9 @@ async def providers_home(call: CallbackQuery, session: AsyncSession, settings: S
     states = {name: name in enabled for name in CASCADE}
     configured = {name: provider_configured(name, settings) for name in CASCADE}
     await safe_answer(call)
-    await safe_edit(call.message, texts.providers_home(states, configured), kb.providers(states))
+    await safe_edit(
+        call.message, texts.providers_home(states, configured, settings), kb.providers(states)
+    )
 
 
 @router.callback_query(F.data.startswith("admin:prov:tg:"))
@@ -201,4 +203,6 @@ async def providers_toggle(call: CallbackQuery, session: AsyncSession, settings:
     states = {item: item in enabled for item in CASCADE}
     configured = {item: provider_configured(item, settings) for item in CASCADE}
     await safe_answer(call, f"{name}: {'ВКЛ' if row.enabled else 'ВЫКЛ'}")
-    await safe_edit(call.message, texts.providers_home(states, configured), kb.providers(states))
+    await safe_edit(
+        call.message, texts.providers_home(states, configured, settings), kb.providers(states)
+    )
