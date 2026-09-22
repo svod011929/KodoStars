@@ -11,6 +11,7 @@ from app.bot.admin import texts
 from app.bot.utils import PAGE_SIZE, parse_id, safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import User
+from app.services import ambassadors as amb_service
 from app.services import antifraud, audit, devices, ledger, piarflow_quality, stats, withdrawals
 from app.services.broadcasts import running_broadcast
 
@@ -19,8 +20,11 @@ router = Router(name="admin.home")
 
 async def _home_view(session: AsyncSession, settings: Settings) -> tuple[str, object]:
     pending = await withdrawals.count_queue(session)
+    amb_pending = await amb_service.count_pending(session)
     running = await running_broadcast(session) is not None
-    return texts.home(__version__, pending, running, settings.maintenance_mode), kb.home(pending)
+    return texts.home(__version__, pending, running, settings.maintenance_mode), kb.home(
+        pending, amb_pending
+    )
 
 
 @router.message(Command("admin"))

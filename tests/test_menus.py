@@ -17,7 +17,7 @@ def test_user_main_menu_is_compact_and_grouped() -> None:
     markup = user_kb.main_menu(is_admin=False)
     assert len(markup.inline_keyboard) <= 5
     data = _callbacks(markup)
-    assert {"menu:daily", "menu:tasks", "menu:profile", "menu:refs", "menu:withdraw"} <= data
+    assert {"menu:daily", "menu:tasks", "menu:profile", "menu:refs", "menu:withdraw", "menu:amb"} <= data
     assert "admin:home" not in data
 
     admin_menu = user_kb.main_menu(is_admin=True)
@@ -25,13 +25,15 @@ def test_user_main_menu_is_compact_and_grouped() -> None:
 
 
 def test_admin_home_uses_hubs_not_flat_list() -> None:
-    markup = admin_kb.home(pending=3)
+    markup = admin_kb.home(pending=3, amb_pending=2)
     data = _callbacks(markup)
     assert "admin:catalog" in data and "admin:system" in data
+    assert "admin:amb" in data
     assert "admin:tasks" not in data  # moved under catalog hub
     assert "admin:pay:0" not in data  # moved under system hub
     labels = [btn.text for row in markup.inline_keyboard for btn in row]
     assert any(t == "Выводы (3)" for t in labels)
+    assert any(t == "Амбассадоры (2)" for t in labels)
     assert len(markup.inline_keyboard) <= 5
 
 

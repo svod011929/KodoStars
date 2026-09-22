@@ -37,3 +37,12 @@ class AdminFSM(StatesGroup):
     admin_add = State()
     # data
     import_users = State()
+
+    amb_l1_bonus = State()
+    amb_l1_percent = State()
+    amb_l2_bonus = State()
+    amb_l2_percent = State()
+    amb_promo_reward = State()
+    amb_promo_max_uses = State()
+    amb_reject_reason = State()
+    amb_chat_id = State()

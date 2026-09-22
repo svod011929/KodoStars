@@ -9,12 +9,16 @@ from app.bot import emoji as pe
 from app.bot.utils import fmt_ago, fmt_dt, fmt_signed, h, mention
 from app.config import RUNTIME_OVERRIDABLE, RUNTIME_SETTING_LABELS, Settings
 from app.db.models import (
+    AMBASSADOR_KIND_LABELS,
+    AMBASSADOR_STATUS_LABELS,
     BROADCAST_AUDIENCE_LABELS,
     LEDGER_KIND_LABELS,
     TASK_KIND_LABELS,
     WITHDRAWAL_STATUS_LABELS,
     Admin,
     AdminAction,
+    AmbassadorSlot,
+    AmbassadorStatus,
     BoostKind,
     BoostProduct,
     Broadcast,
@@ -57,7 +61,7 @@ def home(version: str, pending: int, running_broadcast: bool, maintenance: bool)
     queue = f" · очередь выводов: <b>{pending}</b>" if pending else ""
     return (
         f"🛠 <b>Админка</b> <i>v{h(version)}</i>{status}{queue}\n\n"
-        "<b>Операции</b> — статистика, пользователи, выводы, рассылка\n"
+        "<b>Операции</b> — статистика, пользователи, выводы, амбассадоры, рассылка\n"
         "<b>Каталог</b> — задания, бусты, промокоды\n"
         "<b>PiarFlow</b> — ОП и трафик\n"
         "<b>Система</b> — платежи, админы, журнал, антифрод, данные"
@@ -890,3 +894,72 @@ def import_result(created: int, updated: int, unchanged: int, errors: int, error
 
 def no_access() -> str:
     return "Недостаточно прав."
+
+
+def ambassadors_hub(pending: int, approved: int) -> str:
+    return (
+        "🤝 <b>Амбассадоры</b>\n\n"
+        f"На проверке: <b>{pending}</b>\n"
+        f"Одобрено: <b>{approved}</b>"
+    )
+
+
+def ambassadors_empty(kind: str) -> str:
+    return f"Список «{h(kind)}» пуст."
+
+
+def ambassador_card(slot: AmbassadorSlot, owner_name: str = "") -> str:
+    kind = AMBASSADOR_KIND_LABELS.get(slot.kind, slot.kind)
+    status = AMBASSADOR_STATUS_LABELS.get(slot.status, slot.status)
+    who = h(owner_name) if owner_name else str(slot.user_id)
+    lines = [
+        f"🤝 <b>#{slot.id} {h(slot.title)}</b> · {kind}",
+        f"Статус: <b>{status}</b>",
+        f"Владелец: {who} (<code>{slot.user_id}</code>)",
+        f"Ссылка: {h(slot.invite_link)}",
+    ]
+    if slot.chat_id:
+        lines.append(f"chat_id: <code>{slot.chat_id}</code>")
+    if slot.status == AmbassadorStatus.APPROVED.value:
+        lines += [
+            "",
+            f"L1: {slot.l1_bonus} ⭐ / {slot.l1_percent}%",
+            f"L2: {slot.l2_bonus} ⭐ / {slot.l2_percent}%",
+            f"Промо: {slot.promo_reward} ⭐ · лимит {slot.promo_max_uses or '∞'}",
+            f"Автопост: {'да' if slot.promo_auto_post else 'нет'}",
+        ]
+    if slot.reject_reason:
+        lines += ["", f"Причина: {h(slot.reject_reason)}"]
+    return "\n".join(lines)
+
+
+def amb_ask_l1_bonus() -> str:
+    return "L1 бонус за активацию реферала (⭐, целое ≥ 0):"
+
+
+def amb_ask_l1_percent() -> str:
+    return "L1 процент с заработка реферала (0–100):"
+
+
+def amb_ask_l2_bonus() -> str:
+    return "L2 бонус (⭐):"
+
+
+def amb_ask_l2_percent() -> str:
+    return "L2 процент (0–100):"
+
+
+def amb_ask_promo_reward() -> str:
+    return "Награда дневного промокода (⭐, ≥ 1):"
+
+
+def amb_ask_promo_max_uses() -> str:
+    return "Лимит активаций промокода (0 = без лимита):"
+
+
+def amb_ask_reject() -> str:
+    return "Причина отклонения:"
+
+
+def amb_ask_chat_id() -> str:
+    return "Numeric chat_id канала/чата (после добавления бота админом):"

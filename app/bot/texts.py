@@ -9,8 +9,11 @@ from app.bot import emoji as pe
 from app.bot.utils import button, fmt_dt, fmt_duration, fmt_signed, h, markup
 from app.config import Settings
 from app.db.models import (
+    AMBASSADOR_KIND_LABELS,
+    AMBASSADOR_STATUS_LABELS,
     LEDGER_KIND_LABELS,
     WITHDRAWAL_STATUS_LABELS,
+    AmbassadorStatus,
     LedgerEntry,
     PromoCode,
     Task,
@@ -547,3 +550,67 @@ def notify_balance_adjusted(amount: int, reason: str) -> str:
 def notify_refund(xtr: int, revoked: int, title: str) -> str:
     revoked_line = f"\nС баланса списано {revoked} {STAR}." if revoked else ""
     return f"↩️ Покупка «{h(title)}» возвращена: {xtr} XTR вернутся на ваш счёт Telegram.{revoked_line}"
+
+
+def ambassador_hub(slots_count: int) -> str:
+    return (
+        f"🤝 <b>Амбассадор {BOT}</b>\n\n"
+        "Подключите канал, чат или бота — после одобрения получите особые реф-условия "
+        "и ежедневные промокоды.\n"
+        f"Ваших заявок: <b>{slots_count}</b>."
+    )
+
+
+def ambassador_pick_kind() -> str:
+    return "Выберите тип площадки:"
+
+
+def ambassador_ask_link(kind_label: str) -> str:
+    return (
+        f"Ссылка на {h(kind_label)}.\n"
+        "Примеры: <code>https://t.me/mychannel</code>, <code>@mychannel</code>, "
+        "<code>https://t.me/+invite</code>"
+    )
+
+
+def ambassador_ask_title() -> str:
+    return "Короткое название площадки (до 128 символов):"
+
+
+def ambassador_submitted(title: str) -> str:
+    return (
+        f"✅ Заявка «{h(title)}» отправлена.\n"
+        "Администратор проверит её и назначит условия."
+    )
+
+
+def ambassador_slot_text(slot, today_code: str | None = None) -> str:
+    kind = AMBASSADOR_KIND_LABELS.get(slot.kind, slot.kind)
+    status = AMBASSADOR_STATUS_LABELS.get(slot.status, slot.status)
+    lines = [
+        f"🤝 <b>{h(slot.title)}</b> · {kind}",
+        f"Статус: <b>{status}</b>",
+        f"Ссылка: {h(slot.invite_link)}",
+    ]
+    if slot.status == AmbassadorStatus.APPROVED.value:
+        lines += [
+            "",
+            f"Реф L1: <b>{slot.l1_bonus} {STAR}</b> / <b>{slot.l1_percent}%</b>",
+            f"Реф L2: <b>{slot.l2_bonus} {STAR}</b> / <b>{slot.l2_percent}%</b>",
+            f"Промо: {slot.promo_reward} {STAR}, лимит {slot.promo_max_uses or '∞'}",
+            f"Автопост: {'вкл' if slot.promo_auto_post else 'выкл'}",
+        ]
+        if today_code:
+            lines += ["", f"Промокод на сегодня: <code>{h(today_code)}</code>"]
+    elif slot.status == AmbassadorStatus.REJECTED.value and slot.reject_reason:
+        lines += ["", f"Причина: {h(slot.reject_reason)}"]
+    return "\n".join(lines)
+
+
+def ambassador_promo_ready(code: str, reward: int, max_uses: int, posted: bool) -> str:
+    limit = "без лимита" if max_uses == 0 else f"до {max_uses} акт."
+    post = "\n📣 Опубликовано в канал/чат." if posted else ""
+    return (
+        f"🎟 Промокод на сегодня: <code>{h(code)}</code>\n"
+        f"Награда: <b>{reward} {STAR}</b> · {limit}.{post}"
+    )

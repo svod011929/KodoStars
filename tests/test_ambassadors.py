@@ -180,3 +180,46 @@ async def test_referral_bonus_uses_ambassador_terms(session: AsyncSession, setti
     )
     entry = result.scalar_one()
     assert entry.amount == 77
+
+
+@pytest.mark.asyncio
+async def test_publish_promo_requires_admin(session: AsyncSession, settings: Settings) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from aiogram.enums import ChatMemberStatus
+    from app.services.errors import ValidationError
+
+    user = User(id=10, first_name="A")
+    session.add(user)
+    await session.flush()
+    slot = await amb.submit_application(
+        session, user=user, kind="channel", title="C", invite_link="https://t.me/c"
+    )
+    await amb.approve_slot(
+        session,
+        slot_id=slot.id,
+        admin_id=1,
+        l1_bonus=10,
+        l1_percent=15,
+        l2_bonus=3,
+        l2_percent=5,
+        promo_reward=5,
+        promo_max_uses=10,
+    )
+    await amb.set_chat_id(session, slot.id, -1001)
+    promo = await amb.claim_daily_promo(session, slot_id=slot.id, user_id=10)
+
+    bot = MagicMock()
+    bot.get_me = AsyncMock(return_value=MagicMock(id=999))
+    member = MagicMock()
+    member.status = ChatMemberStatus.MEMBER
+    bot.get_chat_member = AsyncMock(return_value=member)
+    bot.send_message = AsyncMock()
+
+    with pytest.raises(ValidationError):
+        await amb.publish_promo(bot, slot, promo)
+    bot.send_message.assert_not_called()
+
+    member.status = ChatMemberStatus.ADMINISTRATOR
+    await amb.publish_promo(bot, slot, promo)
+    bot.send_message.assert_awaited()

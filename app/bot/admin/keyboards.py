@@ -9,9 +9,14 @@ from aiogram.types import InlineKeyboardMarkup
 from app.bot.utils import PAGE_SIZE, button, markup, pager
 from app.config import RUNTIME_OVERRIDABLE, RUNTIME_SETTING_LABELS
 from app.db.models import (
+    AMBASSADOR_KIND_LABELS,
+    AMBASSADOR_STATUS_LABELS,
     BROADCAST_AUDIENCE_LABELS,
     TASK_KIND_LABELS,
     Admin,
+    AmbassadorKind,
+    AmbassadorSlot,
+    AmbassadorStatus,
     BoostKind,
     BoostProduct,
     Broadcast,
@@ -29,15 +34,16 @@ def _back(target: str = "admin:home"):
     return button("Назад", target, icon="back")
 
 
-def home(pending: int = 0) -> InlineKeyboardMarkup:
+def home(pending: int = 0, amb_pending: int = 0) -> InlineKeyboardMarkup:
     """Compact admin root: operations · products · traffic · system hubs."""
     wd_label = f"Выводы ({pending})" if pending else "Выводы"
+    amb_label = f"Амбассадоры ({amb_pending})" if amb_pending else "Амбассадоры"
     return markup(
         [button("Статистика", "admin:stats", icon="stats"), button("Пользователи", "admin:users", icon="users")],
-        [button(wd_label, "admin:wd", icon="withdraw"), button("Рассылка", "admin:bc", icon="broadcast")],
-        [button("Каталог", "admin:catalog", icon="box"), button("PiarFlow", "admin:prov", icon="lock")],
-        [button("Настройки", "admin:set", icon="settings"), button("Система", "admin:system", icon="admin")],
-        [button("В меню", "menu:home", icon="home")],
+        [button(wd_label, "admin:wd", icon="withdraw"), button(amb_label, "admin:amb", icon="handshake")],
+        [button("Рассылка", "admin:bc", icon="broadcast"), button("Каталог", "admin:catalog", icon="box")],
+        [button("PiarFlow", "admin:prov", icon="lock"), button("Система", "admin:system", icon="admin")],
+        [button("Настройки", "admin:set", icon="settings"), button("В меню", "menu:home", icon="home")],
     )
 
 
@@ -588,3 +594,44 @@ def data_home() -> InlineKeyboardMarkup:
         [button("Импорт пользователей", "admin:import", icon="upload")],
         [_back("admin:system")],
     )
+
+
+def ambassadors_hub(pending: int, approved: int) -> InlineKeyboardMarkup:
+    return markup(
+        [button(f"Очередь ({pending})", "admin:amb:pending", icon="doc")],
+        [button(f"Одобренные ({approved})", "admin:amb:list", icon="check")],
+        [_back()],
+    )
+
+
+def ambassadors_list(slots: Sequence[AmbassadorSlot], *, back: str = "admin:amb") -> InlineKeyboardMarkup:
+    rows = []
+    for slot in slots[:20]:
+        kind = AMBASSADOR_KIND_LABELS.get(slot.kind, slot.kind)
+        rows.append(
+            [button(f"#{slot.id} {kind}: {slot.title[:16]}", f"admin:amb:{slot.id}", icon="handshake")]
+        )
+    rows.append([_back(back)])
+    return markup(*rows)
+
+
+def ambassador_card(slot: AmbassadorSlot) -> InlineKeyboardMarkup:
+    rows: list[list] = []
+    if slot.status == AmbassadorStatus.PENDING.value:
+        rows.append(
+            [
+                button("Одобрить", f"admin:amb:{slot.id}:ok", icon="check"),
+                button("Отклонить", f"admin:amb:{slot.id}:no", icon="cross"),
+            ]
+        )
+    elif slot.status == AmbassadorStatus.APPROVED.value:
+        rows.append([button("Изменить условия", f"admin:amb:{slot.id}:edit", icon="pencil")])
+        if slot.kind != AmbassadorKind.BOT.value:
+            rows.append([button("Chat ID", f"admin:amb:{slot.id}:chat", icon="link")])
+            if slot.promo_auto_post:
+                rows.append([button("Выкл. автопост", f"admin:amb:{slot.id}:autopost:0", icon="cross")])
+            else:
+                rows.append([button("Вкл. автопост", f"admin:amb:{slot.id}:autopost:1", icon="megaphone")])
+        rows.append([button("Отозвать", f"admin:amb:{slot.id}:revoke", icon="ban")])
+    rows.append([_back("admin:amb")])
+    return markup(*rows)

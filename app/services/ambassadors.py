@@ -6,6 +6,8 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+from aiogram import Bot
+from aiogram.enums import ChatMemberStatus
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +20,7 @@ from app.db.models import (
     User,
 )
 from app.services import promo as promo_service
-from app.services.errors import NotFound, ValidationError
+from app.services.errors import EconomyError, NotFound, ValidationError
 
 _ACTIVE = (AmbassadorStatus.PENDING.value, AmbassadorStatus.APPROVED.value)
 _VALID_KINDS = {k.value for k in AmbassadorKind}
@@ -347,3 +349,53 @@ async def claim_daily_promo(
         ambassador_slot_id=slot.id,
         promo_day_key=day,
     )
+
+
+async def bot_is_chat_admin(bot: Bot, chat_id: int) -> bool:
+    try:
+        me = await bot.get_me()
+        member = await bot.get_chat_member(chat_id, me.id)
+    except Exception:
+        return False
+    return member.status in {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR}
+
+
+async def enable_auto_post(session: AsyncSession, bot: Bot, slot_id: int) -> AmbassadorSlot:
+    slot = await get_slot(session, slot_id)
+    if slot.kind == AmbassadorKind.BOT.value:
+        raise ValidationError("Автопост недоступен для типа «бот»")
+    if slot.status != AmbassadorStatus.APPROVED.value:
+        raise ValidationError("Слот не одобрен")
+    if not slot.chat_id:
+        raise ValidationError("Сначала укажите chat_id канала/чата")
+    if not await bot_is_chat_admin(bot, slot.chat_id):
+        raise ValidationError("Бот должен быть администратором в канале/чате")
+    slot.promo_auto_post = True
+    await session.flush()
+    return slot
+
+
+async def disable_auto_post(session: AsyncSession, slot_id: int) -> AmbassadorSlot:
+    slot = await get_slot(session, slot_id)
+    slot.promo_auto_post = False
+    await session.flush()
+    return slot
+
+
+async def publish_promo(bot: Bot, slot: AmbassadorSlot, promo: PromoCode) -> None:
+    if slot.kind == AmbassadorKind.BOT.value:
+        raise ValidationError("Автопост недоступен для бота")
+    if not slot.chat_id:
+        raise ValidationError("Не указан chat_id")
+    if not await bot_is_chat_admin(bot, slot.chat_id):
+        raise ValidationError("Бот не админ в канале/чате — автопост выключен")
+    text = (
+        f"🎟 Промокод <b>{promo.code}</b>\n"
+        f"Награда: <b>{promo.reward}</b> ⭐"
+        + (f" · до {promo.max_uses} активаций" if promo.max_uses else "")
+        + "\nАктивируйте в боте."
+    )
+    try:
+        await bot.send_message(slot.chat_id, text)
+    except Exception as exc:
+        raise EconomyError(f"Не удалось опубликовать: {exc}") from exc

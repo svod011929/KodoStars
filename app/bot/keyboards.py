@@ -9,7 +9,17 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from app.bot import emoji as pe
 from app.bot.utils import PAGE_SIZE, button, markup, pager, url_button
-from app.db.models import BoostProduct, Task, TaskKind, Withdrawal, WithdrawalStatus
+from app.db.models import (
+    AMBASSADOR_KIND_LABELS,
+    AMBASSADOR_STATUS_LABELS,
+    AmbassadorKind,
+    AmbassadorStatus,
+    BoostProduct,
+    Task,
+    TaskKind,
+    Withdrawal,
+    WithdrawalStatus,
+)
 from app.op.base import Sponsor
 from app.services.channels import parse_channel_entry
 from app.services.gifts import GiftOffer
@@ -39,7 +49,7 @@ def main_menu(is_admin: bool = False, device_url: str | None = None) -> InlineKe
         [button("Профиль", "menu:profile", icon="profile"), button("Рефералы", "menu:refs", icon="people")],
         [button("Вывод", "menu:withdraw", icon="withdraw"), button("Бусты", "menu:boosts", icon="boost")],
         [button("Топ", "menu:top:refs", icon="top"), button("Промокод", "menu:promo", icon="promo")],
-        [button("Помощь", "menu:help", icon="help")],
+        [button("Амбассадор", "menu:amb", icon="handshake"), button("Помощь", "menu:help", icon="help")],
     ]
     if is_admin:
         rows.append([button("Админка", "admin:home", icon="admin")])
@@ -220,4 +230,38 @@ def help_menu(support: str) -> InlineKeyboardMarkup:
     rows.append(
         [button("Условия", "menu:terms", icon="doc"), button("В меню", "menu:home", icon="home")]
     )
+    return markup(*rows)
+
+
+def ambassador_home(slots: Sequence) -> InlineKeyboardMarkup:
+    rows = []
+    for slot in slots[:12]:
+        kind = AMBASSADOR_KIND_LABELS.get(slot.kind, slot.kind)
+        status = AMBASSADOR_STATUS_LABELS.get(slot.status, slot.status)
+        rows.append(
+            [button(f"{kind}: {slot.title[:18]} · {status}", f"amb:slot:{slot.id}", icon="handshake")]
+        )
+    rows.append([button("Подать заявку", "amb:new", icon="plus")])
+    rows.append([button("В меню", "menu:home", icon="home")])
+    return markup(*rows)
+
+
+def ambassador_kind_pick() -> InlineKeyboardMarkup:
+    return markup(
+        [
+            button("Канал", "amb:kind:channel", icon="megaphone"),
+            button("Чат", "amb:kind:chat", icon="people"),
+        ],
+        [button("Бот", "amb:kind:bot", icon="bot")],
+        [button("Отмена", "menu:amb", icon="cross")],
+    )
+
+
+def ambassador_slot_card(slot, *, today_code: str | None = None) -> InlineKeyboardMarkup:
+    rows = []
+    if slot.status == AmbassadorStatus.APPROVED.value:
+        rows.append([button("Получить промокод", f"amb:claim:{slot.id}", icon="promo")])
+        if today_code and slot.kind != AmbassadorKind.BOT.value and slot.chat_id:
+            rows.append([button("Опубликовать сегодня", f"amb:post:{slot.id}", icon="megaphone")])
+    rows.append([button("К списку", "menu:amb", icon="back"), button("В меню", "menu:home", icon="home")])
     return markup(*rows)

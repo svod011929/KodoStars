@@ -2,6 +2,7 @@ from aiogram import Router
 
 from app.bot.admin import (
     admins,
+    ambassadors,
     broadcast,
     catalog,
     data,
@@ -24,6 +25,7 @@ def build_admin_router() -> Router:
         home,
         users,
         withdrawals,
+        ambassadors,
         broadcast,
         catalog,
         promo,

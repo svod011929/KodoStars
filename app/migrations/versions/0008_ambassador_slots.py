@@ -45,22 +45,26 @@ def upgrade() -> None:
     op.create_index("ix_ambassador_slots_status", "ambassador_slots", ["status"])
     op.create_index("ix_ambassador_slots_user_status", "ambassador_slots", ["user_id", "status"])
 
-    op.add_column(
-        "promo_codes",
-        sa.Column("ambassador_slot_id", sa.Integer(), sa.ForeignKey("ambassador_slots.id"), nullable=True),
-    )
-    op.add_column("promo_codes", sa.Column("promo_day_key", sa.String(10), nullable=True))
-    op.create_index("ix_promo_codes_ambassador_slot_id", "promo_codes", ["ambassador_slot_id"])
-    op.create_unique_constraint(
-        "uq_ambassador_promo_day", "promo_codes", ["ambassador_slot_id", "promo_day_key"]
-    )
+    with op.batch_alter_table("promo_codes") as batch:
+        batch.add_column(sa.Column("ambassador_slot_id", sa.Integer(), nullable=True))
+        batch.add_column(sa.Column("promo_day_key", sa.String(10), nullable=True))
+        batch.create_foreign_key(
+            "fk_promo_codes_ambassador_slot_id",
+            "ambassador_slots",
+            ["ambassador_slot_id"],
+            ["id"],
+        )
+        batch.create_index("ix_promo_codes_ambassador_slot_id", ["ambassador_slot_id"])
+        batch.create_unique_constraint("uq_ambassador_promo_day", ["ambassador_slot_id", "promo_day_key"])
 
 
 def downgrade() -> None:
-    op.drop_constraint("uq_ambassador_promo_day", "promo_codes", type_="unique")
-    op.drop_index("ix_promo_codes_ambassador_slot_id", table_name="promo_codes")
-    op.drop_column("promo_codes", "promo_day_key")
-    op.drop_column("promo_codes", "ambassador_slot_id")
+    with op.batch_alter_table("promo_codes") as batch:
+        batch.drop_constraint("uq_ambassador_promo_day", type_="unique")
+        batch.drop_index("ix_promo_codes_ambassador_slot_id")
+        batch.drop_constraint("fk_promo_codes_ambassador_slot_id", type_="foreignkey")
+        batch.drop_column("promo_day_key")
+        batch.drop_column("ambassador_slot_id")
     op.drop_index("ix_ambassador_slots_user_status", table_name="ambassador_slots")
     op.drop_index("ix_ambassador_slots_status", table_name="ambassador_slots")
     op.drop_index("ix_ambassador_slots_user_id", table_name="ambassador_slots")
