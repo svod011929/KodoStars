@@ -16,6 +16,7 @@ from app.bot.admin import texts as admin_texts
 from app.db.models import Broadcast, User, Withdrawal
 from app.services import ledger, referrals
 from app.services.access import AccessRegistry
+from app.services.app_settings import RuntimeSettingsStore
 from app.services.events import DomainEvent
 
 log = structlog.get_logger("kodostars.notify")
@@ -27,10 +28,12 @@ class Notifier:
         bot: Bot,
         session_factory: async_sessionmaker,
         access: AccessRegistry,
+        settings_store: RuntimeSettingsStore | None = None,
     ) -> None:
         self._bot = bot
         self._factory = session_factory
         self._access = access
+        self._settings_store = settings_store
 
     async def dispatch(self, events: list[DomainEvent], data: dict[str, Any]) -> None:
         for event in events:
@@ -78,6 +81,11 @@ class Notifier:
                     payload["user_id"],
                     texts.notify_piarflow_unsubscribed(int(payload.get("penalty") or 0)),
                 )
+            case "tgrass_unsubscribed":
+                await self._send(
+                    payload["user_id"],
+                    texts.notify_piarflow_unsubscribed(int(payload.get("penalty") or 0)),
+                )
             case "referral_joined":
                 await self._send(
                     payload["referrer_id"], texts.notify_referral_joined(payload["referee_name"])
@@ -97,6 +105,8 @@ class Notifier:
                 await self._withdrawal_created(payload["withdrawal_id"])
             case "withdrawal_status":
                 await self._withdrawal_status(payload)
+                if payload.get("status") == "sent":
+                    await self._payout_log(int(payload["withdrawal_id"]))
             case "withdrawal_cancelled":
                 await self._withdrawal_cancelled(payload["withdrawal_id"])
             case "balance_adjusted":
@@ -116,6 +126,24 @@ class Notifier:
                     await self._send(admin_id, payload["text"])
             case _:
                 log.debug("notify_unknown_event", event=event.name)
+
+    async def _payout_log(self, withdrawal_id: int) -> None:
+        """Post completed payout to the configured public log channel (if any)."""
+        if self._settings_store is None:
+            return
+        async with self._factory() as session:
+            settings = await self._settings_store.effective(session)
+            chat_id = int(settings.payout_log_chat_id or 0)
+            if not chat_id:
+                return
+            wd = await session.get(Withdrawal, withdrawal_id)
+            if wd is None:
+                return
+            user = await session.get(User, wd.user_id)
+            if user is None:
+                return
+            text = admin_texts.payout_log_post(wd, user)
+        await self._send(chat_id, text)
 
     async def _withdrawal_created(self, withdrawal_id: int) -> None:
         async with self._factory() as session:

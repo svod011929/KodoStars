@@ -8,13 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
 from app.bot.middlewares.events import unwrap_event
-from app.bot.render import device_url_for
 from app.config import Settings
 from app.db.models import User
-from app.op.base import OpContext
+from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
 from app.services import piarflow_quality
-from app.services.devices import op_access_block_reason
 
 _SKIP_PREFIXES = (
     "op:",
@@ -55,13 +53,6 @@ class OpGateMiddleware(BaseMiddleware):
         if _op_fresh(user, settings.op_cache_sec):
             return await handler(event, data)
 
-        block = op_access_block_reason(user, settings)
-        if block is not None:
-            await _reply_device_or_twink(inner, user, settings, block)
-            if isinstance(inner, CallbackQuery):
-                await inner.answer()
-            return None
-
         ctx = OpContext(
             user_id=user.id,
             chat_id=_chat_id(event, user.id),
@@ -71,17 +62,15 @@ class OpGateMiddleware(BaseMiddleware):
             is_premium=user.is_premium,
             bot=bot,
         )
-        result = await self._gate.enforce(ctx, session, settings=settings)
+        # Verified → PiarFlow then Tgrass; unverified → Tgrass only (no hard device gate).
+        result = await self._gate.enforce(ctx, session, settings=settings, user=user)
         await piarflow_quality.record_from_op_result(session, user.id, result)
-        if result.allowed:
-            user.last_op_ok_at = datetime.now(UTC)
-            return await handler(event, data)
+        if not result.allowed:
+            await _reply_blocked(inner, result)
+            return None
 
-        markup = keyboards.op_keyboard(result.sponsors)
-        await _reply(inner, texts.op_blocked(result.provider, result.message), markup)
-        if isinstance(inner, CallbackQuery):
-            await inner.answer()
-        return None
+        user.last_op_ok_at = datetime.now(UTC)
+        return await handler(event, data)
 
 
 def _should_skip(event: TelegramObject, settings: Settings) -> bool:
@@ -116,14 +105,12 @@ def _chat_id(event: TelegramObject, fallback: int) -> int:
     return fallback
 
 
-async def _reply_device_or_twink(
-    event: TelegramObject, user: User, settings: Settings, reason: str
-) -> None:
-    if reason == "device":
-        url = device_url_for(user, settings) or settings.web_url("verify")
-        await _reply(event, texts.op_need_device(), keyboards.device_gate_keyboard(url))
-        return
-    await _reply(event, texts.op_twink_blocked(settings.support_contact))
+async def _reply_blocked(event: TelegramObject, result: OpResult) -> None:
+    inner = unwrap_event(event)
+    markup = keyboards.op_keyboard(result.sponsors)
+    await _reply(inner, texts.op_blocked(result.provider, result.message), markup)
+    if isinstance(inner, CallbackQuery):
+        await inner.answer()
 
 
 async def _reply(event: TelegramObject, text: str, markup=None) -> None:

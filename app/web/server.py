@@ -7,6 +7,8 @@ Routes:
 * ``GET /verify``               — the Mini App page (device verification)
 * ``POST /api/device``          — verification callback: signed ``initData`` + fingerprint
 * ``POST /api/piarflow/webhook`` — PiarFlow unsubscribe webhook
+* ``POST /api/tgrass/webhook``   — Tgrass task + unsubscribe webhooks
+* ``POST /api/tgrass/unsubscribe`` — alias for Tgrass unsubscribe URL in @tgrassbot UI
 
 The server listens on ``SERVER_PORT`` (RubyHost injects it) and is reachable through
 the panel's HTTPS address configured as ``WEB_PUBLIC_URL``.
@@ -32,6 +34,7 @@ from app.config import Settings
 from app.db.models import User
 from app.services import devices, events, referrals
 from app.services import piarflow_webhook
+from app.services import tgrass_webhook
 from app.services import tasks as task_service
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.errors import EconomyError
@@ -116,6 +119,8 @@ class WebServer:
         app.router.add_get("/verify", self.verify_page)
         app.router.add_post("/api/device", self.api_device)
         app.router.add_post("/api/piarflow/webhook", self.piarflow_webhook)
+        app.router.add_post("/api/tgrass/webhook", self.tgrass_webhook)
+        app.router.add_post("/api/tgrass/unsubscribe", self.tgrass_webhook)
         return app
 
     async def start(self, host: str, port: int) -> None:
@@ -242,6 +247,45 @@ class WebServer:
                 log.warning("piarflow_webhook_events_failed", exc_info=True)
         log.info(
             "piarflow_webhook",
+            processed=result.processed,
+            duplicate=result.duplicate,
+            penalty=result.penalty,
+            user_id=result.user_id,
+            ip=ip,
+        )
+        return web.json_response({"ok": True})
+
+    async def tgrass_webhook(self, request: web.Request) -> web.Response:
+        """Tgrass task/unsubscribe callbacks — set URLs in @tgrassbot → Webhook."""
+        ip = client_ip(request)
+        if not self._limiter.allow(f"tg:{ip or 'unknown'}"):
+            return web.json_response({"ok": False, "error": "rate_limited"}, status=429)
+        try:
+            payload: dict[str, Any] = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "invalid_json"}, status=400)
+        if not isinstance(payload, dict):
+            return web.json_response({"ok": False, "error": "invalid_json"}, status=400)
+
+        if payload.get("test"):
+            return web.json_response({"ok": True})
+
+        pending: list[DomainEvent] = []
+        async with self._factory() as session:
+            settings = await self._store.effective(session)
+            result = await tgrass_webhook.handle_webhook(
+                session, payload=payload, settings=settings
+            )
+            await session.commit()
+            pending = events.drain(session)
+        if pending and self._events_sink is not None:
+            try:
+                await self._events_sink(pending)
+            except Exception:
+                log.warning("tgrass_webhook_events_failed", exc_info=True)
+        log.info(
+            "tgrass_webhook",
+            kind=result.kind,
             processed=result.processed,
             duplicate=result.duplicate,
             penalty=result.penalty,

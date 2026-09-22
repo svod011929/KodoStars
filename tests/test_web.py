@@ -80,7 +80,7 @@ async def web() -> AsyncIterator[Harness]:
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     bot, tg = make_bot()
     access = AccessRegistry(settings.admin_ids)
-    notifier = Notifier(bot, factory, access)
+    notifier = Notifier(bot, factory, access, RuntimeSettingsStore(settings))
     server = WebServer(
         bot=bot,
         session_factory=factory,

@@ -43,12 +43,14 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "twink_require_ip_match": bool,
     "twink_ip_window_days": int,
     "piarflow_unsub_penalty": int,
+    "tgrass_unsub_penalty": int,
     "currency_emoji_id": str,
     "currency_emoji_fallback": str,
     "botohub_views_enabled": bool,
     "botohub_views_token": str,
     "botohub_views_cooldown_seconds": int,
     "botohub_views_api_url": str,
+    "payout_log_chat_id": int,
 }
 
 RUNTIME_SETTING_LABELS: dict[str, str] = {
@@ -83,13 +85,97 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "twink_require_ip_match": "Антитвинк: считать твинком только при совпадении IP",
     "twink_ip_window_days": "Антитвинк: окно совпадения IP, дней",
     "piarflow_unsub_penalty": "PiarFlow: штраф за отписку, ⭐",
+    "tgrass_unsub_penalty": "Tgrass: штраф за отписку, ⭐",
     "currency_emoji_id": "Валюта: ID премиум-эмодзи",
     "currency_emoji_fallback": "Валюта: unicode-fallback эмодзи",
     "botohub_views_enabled": "BotoHub Views: показы включены",
     "botohub_views_token": "BotoHub Views: API-токен",
     "botohub_views_cooldown_seconds": "BotoHub Views: пауза между показами, с",
     "botohub_views_api_url": "BotoHub Views: URL SendPost",
+    "payout_log_chat_id": "Канал выплат (chat_id, 0 = выкл)",
 }
+
+# Compact admin settings hubs — every RUNTIME_OVERRIDABLE key must appear once.
+SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
+    "refs": (
+        "referral_l1_percent",
+        "referral_l2_percent",
+        "referral_l1_bonus",
+        "referral_l2_bonus",
+        "min_referral_activity",
+        "referral_min_piarflow_subs",
+        "notify_referrer",
+    ),
+    "rewards": (
+        "daily_base_reward",
+        "daily_streak_bonus",
+        "daily_streak_cap",
+        "signup_bonus",
+        "claim_cooldown_seconds",
+        "currency_emoji_id",
+        "currency_emoji_fallback",
+    ),
+    "withdraw": (
+        "withdraw_enabled",
+        "withdraw_min",
+        "withdraw_max",
+        "withdraw_cooldown_hours",
+        "withdraw_min_referrals",
+        "payout_log_chat_id",
+    ),
+    "antifraud": (
+        "device_check_enabled",
+        "device_check_for_withdraw",
+        "device_check_for_op",
+        "twink_block_referral",
+        "twink_block_withdraw",
+        "twink_block_op",
+        "twink_require_ip_match",
+        "twink_ip_window_days",
+    ),
+    "traffic": (
+        "op_cache_sec",
+        "piarflow_unsub_penalty",
+        "tgrass_unsub_penalty",
+        "botohub_views_enabled",
+        "botohub_views_token",
+        "botohub_views_cooldown_seconds",
+        "botohub_views_api_url",
+    ),
+    "system": (
+        "support_contact",
+        "maintenance_mode",
+        "maintenance_text",
+        "broadcast_rate_per_sec",
+    ),
+}
+
+SETTINGS_GROUP_LABELS: dict[str, str] = {
+    "refs": "Рефералы",
+    "rewards": "Награды",
+    "withdraw": "Вывод",
+    "antifraud": "Антитвинк",
+    "traffic": "Трафик",
+    "system": "Система",
+}
+
+SETTINGS_GROUP_ICONS: dict[str, str] = {
+    "refs": "people",
+    "rewards": "gift",
+    "withdraw": "withdraw",
+    "antifraud": "fraud",
+    "traffic": "lock",
+    "system": "admin",
+}
+
+_SETTING_TO_GROUP: dict[str, str] = {
+    key: group for group, keys in SETTINGS_GROUPS.items() for key in keys
+}
+
+
+def setting_group(key: str) -> str | None:
+    """Return settings hub id for a runtime key, if grouped."""
+    return _SETTING_TO_GROUP.get(key)
 
 
 class Settings(BaseSettings):
@@ -126,6 +212,8 @@ class Settings(BaseSettings):
     withdraw_enabled: bool = True
     signup_bonus: int = 5
     claim_cooldown_seconds: int = 3
+    # Public log channel for completed payouts (Telegram chat id, e.g. -100…). 0 = off.
+    payout_log_chat_id: int = 0
 
     # Web server (Telegram Mini App + PiarFlow unsubscribe webhook).
     web_public_url: str = ""
@@ -155,6 +243,14 @@ class Settings(BaseSettings):
     piarflow_api_url: str = "https://piarflow.com/v1"
     piarflow_max_sponsors: int = 5
     piarflow_unsub_penalty: int = 10
+
+    # Tgrass — https://tgrass.space/integration (POST /offers, Auth header).
+    # Shown after device/twin when verified; alone when not (see providers_for_user).
+    tgrass_enabled: bool = True
+    tgrass_api_key: str = ""
+    tgrass_api_url: str = "https://tgrass.space"
+    tgrass_max_sponsors: int = 5
+    tgrass_unsub_penalty: int = 10
 
     # Premium custom-emoji for the internal Stars currency (messages + icon="star").
     currency_emoji_id: str = _DEFAULT_CURRENCY_EMOJI_ID
@@ -206,6 +302,7 @@ class Settings(BaseSettings):
         "claim_cooldown_seconds",
         "op_cache_sec",
         "piarflow_unsub_penalty",
+        "tgrass_unsub_penalty",
         "botohub_views_cooldown_seconds",
     )
     @classmethod

@@ -66,23 +66,49 @@ async def test_start_creates_user_credits_signup_and_shows_home(harness: BotHarn
 
 
 @pytest.mark.asyncio
-async def test_op_gate_requires_device_before_sponsors(harness: BotHarness) -> None:
+async def test_op_gate_unverified_skips_piarflow_allows_tgrass_skip(harness: BotHarness) -> None:
+    """Without device check, cascade is Tgrass-only; empty key → skip → home opens."""
     h = harness
     h.settings.web_public_url = "https://mini.example"
     h.settings.device_check_for_op = True
+    h.settings.tgrass_api_key = ""
+    h.settings.piarflow_api_key = "should-not-be-called"
     await _start(h, USER_ID)
-    assert "Сначала подтвердите устройство" in h.tg.last_text(USER_ID)
-    keyboard = h.tg.sent(SendMessage)[-1].reply_markup
-    assert keyboard is not None
-    assert keyboard.inline_keyboard[0][0].web_app.url == "https://mini.example/verify"
-
-    # Regular menu callbacks are blocked the same way (no PiarFlow call yet).
-    await h.feed(callback_update(USER_ID, "menu:daily"))
-    assert "Сначала подтвердите устройство" in h.tg.last_text(USER_ID)
+    assert "KodoStars" in h.tg.last_text(USER_ID)
+    async with h.factory() as session:
+        user = await session.get(User, USER_ID)
+        assert user.last_op_ok_at is not None
 
     # Admins bypass the gate entirely.
     await _start(h, ADMIN_ID)
     assert "KodoStars" in h.tg.last_text(ADMIN_ID)
+
+
+@pytest.mark.asyncio
+async def test_op_gate_unverified_shows_tgrass_sponsors(harness: BotHarness, monkeypatch) -> None:
+    from app.op.base import OpResult, Sponsor
+    from app.op.tgrass import TgrassAdapter
+
+    h = harness
+    h.settings.web_public_url = "https://mini.example"
+    h.settings.device_check_for_op = True
+    h.settings.tgrass_enabled = True
+    h.settings.tgrass_api_key = "tg-key"
+
+    async def _blocked(self, user):
+        return OpResult.blocked(
+            "tgrass",
+            [Sponsor(title="TG", url="https://t.me/tgchan")],
+            "Подпишитесь",
+        )
+
+    monkeypatch.setattr(TgrassAdapter, "check", _blocked)
+    monkeypatch.setattr(TgrassAdapter, "verify", _blocked)
+    await _start(h, USER_ID)
+    assert "tgrass" in h.tg.last_text(USER_ID).lower() or "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID)
+    # Menu stays gated until Tgrass is done.
+    await h.feed(callback_update(USER_ID, "menu:daily"))
+    assert "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID) or "задан" in h.tg.last_text(USER_ID).lower()
 
 
 @pytest.mark.asyncio
@@ -266,13 +292,33 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness, monkey
         assert wd.status == WithdrawalStatus.SENT.value
         assert wd.gift_id == "g50"
     assert await _balance(h, USER_ID) == 55
+    # No payout log channel configured → nothing posted to a channel chat.
+    assert not any(m.chat_id < 0 for m in h.tg.sent(SendMessage))
 
-    # A second request can be cancelled by the user and Stars come back.
+    # Enable log channel and confirm a second payout lands there.
+    LOG_CHAT = -1001234567890
+    await h.feed(callback_update(ADMIN_ID, "admin:set:payout_log_chat_id"))
+    await h.feed(message_update(ADMIN_ID, str(LOG_CHAT)))
+    assert "Сохранено" in h.tg.last_text(ADMIN_ID)
+    async with h.factory() as session:
+        await ledger.credit(session, user_id=USER_ID, amount=50, kind=LedgerKind.TASK)
+        await session.commit()
     await h.feed(callback_update(USER_ID, "wd:g:g50"))
-    assert await _balance(h, USER_ID) == 5
-    await h.feed(callback_update(USER_ID, "wd:list"))
-    await h.feed(callback_update(USER_ID, "wd:cancel:2"))
+    await h.feed(callback_update(ADMIN_ID, "admin:wd:ok:2"))
+    await h.feed(callback_update(ADMIN_ID, "admin:wd:sent:2"))
+    log_posts = [m for m in h.tg.sent(SendMessage) if m.chat_id == LOG_CHAT]
+    assert log_posts, "expected payout log post in configured channel"
+    assert "Выплата #2" in log_posts[-1].text
+
+    # A third request can be cancelled by the user and Stars come back.
+    async with h.factory() as session:
+        await ledger.credit(session, user_id=USER_ID, amount=50, kind=LedgerKind.TASK)
+        await session.commit()
+    await h.feed(callback_update(USER_ID, "wd:g:g50"))
     assert await _balance(h, USER_ID) == 55
+    await h.feed(callback_update(USER_ID, "wd:list"))
+    await h.feed(callback_update(USER_ID, "wd:cancel:3"))
+    assert await _balance(h, USER_ID) == 105
     assert any("отменена пользователем" in text for text in h.tg.texts(ADMIN_ID))
 
 
@@ -353,6 +399,10 @@ async def test_runtime_settings_and_maintenance(harness: BotHarness) -> None:
     h = harness
     await _start(h, ADMIN_ID)
     await _start(h, USER_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:set"))
+    assert "Выберите раздел" in h.tg.last_text(ADMIN_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:set:g:withdraw"))
+    assert "Вывод" in h.tg.last_text(ADMIN_ID)
     await h.feed(callback_update(ADMIN_ID, "admin:set:withdraw_min"))
     assert "withdraw_min" in h.tg.last_text(ADMIN_ID)
     await h.feed(message_update(ADMIN_ID, "abc"))

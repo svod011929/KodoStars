@@ -10,7 +10,7 @@ from app.bot.admin import keyboards as kb
 from app.bot.admin import texts
 from app.bot.admin.states import AdminFSM
 from app.bot.utils import safe_answer, safe_edit
-from app.config import RUNTIME_OVERRIDABLE, Settings
+from app.config import RUNTIME_OVERRIDABLE, SETTINGS_GROUPS, Settings
 from app.op.gate import CASCADE, enabled_providers, provider_configured, toggle_provider
 from app.services import audit
 from app.services.app_settings import RuntimeSettingsStore, extract_currency_from_message
@@ -30,12 +30,32 @@ async def _settings_view(session: AsyncSession, store: RuntimeSettingsStore):
     return texts.settings_home(effective, overrides), kb.settings_home()
 
 
+async def _group_view(session: AsyncSession, store: RuntimeSettingsStore, group_id: str):
+    effective = await store.effective(session)
+    overrides = await store.overrides(session)
+    return texts.settings_group(group_id, effective, overrides), kb.settings_group(group_id)
+
+
 @router.callback_query(F.data == "admin:set")
 async def settings_home(
     call: CallbackQuery, session: AsyncSession, state: FSMContext, settings_store: RuntimeSettingsStore
 ) -> None:
     await state.clear()
     text, markup = await _settings_view(session, settings_store)
+    await safe_answer(call)
+    await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data.regexp(r"^admin:set:g:(\w+)$"))
+async def settings_group_open(
+    call: CallbackQuery, session: AsyncSession, state: FSMContext, settings_store: RuntimeSettingsStore
+) -> None:
+    group_id = (call.data or "").rsplit(":", 1)[-1]
+    if group_id not in SETTINGS_GROUPS:
+        await safe_answer(call, "Неизвестный раздел", alert=True)
+        return
+    await state.clear()
+    text, markup = await _group_view(session, settings_store, group_id)
     await safe_answer(call)
     await safe_edit(call.message, text, markup)
 

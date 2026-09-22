@@ -7,7 +7,13 @@ from typing import Any
 
 from app.bot import emoji as pe
 from app.bot.utils import fmt_ago, fmt_dt, fmt_signed, h, mention
-from app.config import RUNTIME_OVERRIDABLE, RUNTIME_SETTING_LABELS, Settings
+from app.config import (
+    RUNTIME_OVERRIDABLE,
+    RUNTIME_SETTING_LABELS,
+    SETTINGS_GROUP_LABELS,
+    SETTINGS_GROUPS,
+    Settings,
+)
 from app.db.models import (
     AMBASSADOR_KIND_LABELS,
     AMBASSADOR_STATUS_LABELS,
@@ -32,6 +38,7 @@ from app.db.models import (
 )
 from app.op.gate import CASCADE, PROVIDER_DOCS, PROVIDER_TITLES
 from app.services.app_settings import format_value
+from app.services.promo import activation_link
 from app.services.audit import label as action_label
 from app.services.boosts import describe as describe_boost
 from app.services.stats import Dashboard
@@ -483,6 +490,16 @@ def withdrawal_cancelled_alert(wd: Withdrawal, name: str) -> str:
     return f"↩️ Заявка #{wd.id} на {h(wd.gift_label)} отменена пользователем {h(name)}."
 
 
+def payout_log_post(wd: Withdrawal, user: User) -> str:
+    """Public channel post when a withdrawal is marked sent."""
+    uname = f"@{user.username}" if user.username else "без @username"
+    return (
+        f"💸 <b>Выплата #{wd.id}</b>\n"
+        f"{h(user.display_name)} · {uname} · <code>{user.id}</code>\n"
+        f"{h(wd.gift_label)}"
+    )
+
+
 def reject_reason_prompt(wd: Withdrawal) -> str:
     return (
         f"Причина отклонения заявки #{wd.id} ({h(wd.gift_label)}). "
@@ -692,14 +709,27 @@ def promo_home(items: Sequence[PromoCode], page: int, total: int, page_size: int
     return "\n".join(lines)
 
 
-def promo_card(promo: PromoCode) -> str:
+def promo_card(promo: PromoCode, *, bot_username: str = "") -> str:
     limit = str(promo.max_uses) if promo.max_uses else "без лимита"
-    return (
-        f"🎟 <code>{h(promo.code)}</code> {'🟢 активен' if promo.is_active else '⚪ выключен'}\n\n"
-        f"Награда: {promo.reward} {STAR}\nАктиваций: {promo.uses} · лимит {limit}\n"
-        f"Действует до: {fmt_dt(promo.expires_at) if promo.expires_at else 'бессрочно'}\n"
-        f"Создан: {fmt_dt(promo.created_at)}"
-    )
+    lines = [
+        f"🎟 <code>{h(promo.code)}</code> {'🟢 активен' if promo.is_active else '⚪ выключен'}",
+        "",
+        f"Награда: {promo.reward} {STAR}",
+        f"Активаций: {promo.uses} · лимит {limit}",
+        f"Действует до: {fmt_dt(promo.expires_at) if promo.expires_at else 'бессрочно'}",
+        f"Создан: {fmt_dt(promo.created_at)}",
+    ]
+    if bot_username:
+        link = activation_link(bot_username, promo.code)
+        lines += [
+            "",
+            "<b>Код:</b> <code>" + h(promo.code) + "</code>",
+            f"<b>Ссылка-активатор:</b>\n<code>{h(link)}</code>",
+            "",
+            "Для рассылки укажите кнопку:",
+            f"<code>Активировать | {h(link)}</code>",
+        ]
+    return "\n".join(lines)
 
 
 def promo_new_code() -> str:
@@ -716,6 +746,14 @@ def promo_new_limit() -> str:
 
 def promo_new_days() -> str:
     return "Срок действия в днях (0 — бессрочно):"
+
+
+def promo_broadcast_prompt(promo: PromoCode, link: str) -> str:
+    return (
+        f"📣 Рассылка промокода <code>{h(promo.code)}</code> (+{promo.reward} {STAR})\n\n"
+        f"Кнопка уже будет: <b>Активировать</b> → {h(link)}\n\n"
+        "Отправьте сообщение рассылки (текст / фото / видео…) — дальше выберете аудиторию."
+    )
 
 
 # --- payments -----------------------------------------------------------------------
@@ -766,13 +804,28 @@ def refund_confirm(payment: Payment, title: str) -> str:
 
 
 def settings_home(effective: Settings, overrides: dict[str, Any]) -> str:
+    overridden = sum(1 for key in RUNTIME_OVERRIDABLE if key in overrides)
     lines = [
         "⚙️ <b>Настройки</b>",
         "",
-        "Значения применяются мгновенно без перезапуска. ✏️ — переопределено в БД.",
+        "Выберите раздел. Значения применяются сразу, без перезапуска.",
+        f"Переопределено в БД: <b>{overridden}</b> из {len(RUNTIME_OVERRIDABLE)}.",
+    ]
+    return "\n".join(lines)
+
+
+def settings_group(group_id: str, effective: Settings, overrides: dict[str, Any]) -> str:
+    title = SETTINGS_GROUP_LABELS.get(group_id, group_id)
+    keys = SETTINGS_GROUPS.get(group_id, ())
+    lines = [
+        f"⚙️ <b>{h(title)}</b>",
+        "",
+        "✏️ — переопределено в БД (не из .env).",
         "",
     ]
-    for key in RUNTIME_OVERRIDABLE:
+    for key in keys:
+        if key not in RUNTIME_OVERRIDABLE:
+            continue
         mark = "✏️ " if key in overrides else ""
         lines.append(
             f"{mark}<b>{h(RUNTIME_SETTING_LABELS.get(key, key))}</b>: "
@@ -800,12 +853,18 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
 
 def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
     lines = [
-        "🔒 <b>PiarFlow</b>",
+        "🔒 <b>Провайдеры ОП</b>",
         "",
-        "Единственный провайдер обязательной подписки. "
+        "Порядок для пользователя:",
+        "• проверка устройства пройдена → <b>PiarFlow</b>, затем <b>Tgrass</b>;",
+        "• не пройдена → только <b>Tgrass</b>.",
         "Ошибки API — fail-open (не блокируют пользователей).",
-        "Вебхук отписок: <code>/api/piarflow/webhook</code> на вашем HTTPS.",
-        "Статистика выданных и засчитанных спонсоров — кнопки ниже.",
+        "",
+        "Вебхуки отписок:",
+        "• PiarFlow: <code>/api/piarflow/webhook</code>",
+        "• Tgrass: <code>/api/tgrass/unsubscribe</code> (задания: <code>/api/tgrass/webhook</code>)",
+        "",
+        "Статистика выданных и засчитанных спонсоров PiarFlow — кнопки ниже.",
         "",
     ]
     for name in CASCADE:

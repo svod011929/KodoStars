@@ -7,15 +7,15 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import emoji as pe, keyboards, texts
-from app.bot.render import device_url_for, render_home
+from app.bot.render import render_home
 from app.bot.utils import safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
-from app.services import botohub_views, piarflow_quality, referrals, users
+from app.services import botohub_views, piarflow_quality, promo as promo_service, referrals, users
 from app.services.antifraud import bump_activity
-from app.services.devices import op_access_block_reason
+from app.services.errors import EconomyError
 
 router = Router(name="start")
 
@@ -32,7 +32,7 @@ def _ctx(user: User, chat_id: int, bot: Bot) -> OpContext:
     )
 
 
-async def _gate_device_or_op(
+async def _gate_op(
     *,
     user: User,
     settings: Settings,
@@ -42,15 +42,10 @@ async def _gate_device_or_op(
     op_gate: OpGate,
     verify: bool = False,
 ) -> tuple[str, str | None, object | None, OpResult | None]:
-    """Run twin/device checks first; only then call PiarFlow."""
-    block = op_access_block_reason(user, settings)
-    if block == "device":
-        url = device_url_for(user, settings) or settings.web_url("verify")
-        return "device", texts.op_need_device(), keyboards.device_gate_keyboard(url), None
-    if block == "twink":
-        return "twink", texts.op_twink_blocked(settings.support_contact), None, None
+    """Verified → PiarFlow then Tgrass; unverified → Tgrass only."""
+    ctx = _ctx(user, chat_id, bot)
     result = await op_gate.enforce(
-        _ctx(user, chat_id, bot), session, verify=verify, settings=settings
+        ctx, session, verify=verify, settings=settings, user=user
     )
     await piarflow_quality.record_from_op_result(session, user.id, result)
     if result.allowed:
@@ -61,6 +56,39 @@ async def _gate_device_or_op(
         keyboards.op_keyboard(result.sponsors),
         result,
     )
+
+
+async def _try_redeem_pending_promo(
+    *,
+    session: AsyncSession,
+    user: User,
+    settings: Settings,
+    state: FSMContext,
+    reply: Message | CallbackQuery,
+) -> bool:
+    """Redeem ``pending_promo`` from FSM if set. Returns True when a redeem was attempted."""
+    data = await state.get_data()
+    code = data.get("pending_promo")
+    if not code:
+        return False
+    await state.update_data(pending_promo=None)
+    try:
+        promo, amount = await promo_service.redeem(
+            session, user=user, code=str(code), settings=settings
+        )
+    except EconomyError as exc:
+        text = f"⚠️ {exc.message}"
+        if isinstance(reply, CallbackQuery) and reply.message:
+            await reply.message.answer(pe.premiumize(text))
+        elif isinstance(reply, Message):
+            await reply.answer(pe.premiumize(text))
+        return True
+    ok = pe.premiumize(texts.promo_ok(promo, amount))
+    if isinstance(reply, CallbackQuery) and reply.message:
+        await reply.message.answer(ok, reply_markup=keyboards.back_home())
+    elif isinstance(reply, Message):
+        await reply.answer(ok, reply_markup=keyboards.back_home())
+    return True
 
 
 @router.message(CommandStart())
@@ -75,12 +103,16 @@ async def cmd_start(
     bot_username: str,
     is_admin: bool,
 ) -> None:
-    await state.clear()
     payload = ""
     if message.text:
         parts = message.text.split(maxsplit=1)
         if len(parts) == 2:
             payload = parts[1]
+    await state.clear()
+    promo_code = promo_service.parse_promo_payload(payload)
+    if promo_code:
+        await state.update_data(pending_promo=promo_code)
+
     first_start = users.mark_started(db_user)
     await referrals.attach_referrer(
         session, user=db_user, payload=payload, settings=settings, first_start=first_start
@@ -91,7 +123,7 @@ async def cmd_start(
         )
         return
     if not is_admin:
-        kind, text, markup, _result = await _gate_device_or_op(
+        kind, text, markup, _result = await _gate_op(
             user=db_user,
             settings=settings,
             session=session,
@@ -105,6 +137,9 @@ async def cmd_start(
         db_user.last_op_ok_at = datetime.now(UTC)
     await bump_activity(session, db_user, 1)
     await referrals.activate_if_ready(session, user=db_user, settings=settings)
+    await _try_redeem_pending_promo(
+        session=session, user=db_user, settings=settings, state=state, reply=message
+    )
     text, markup = await render_home(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
@@ -121,6 +156,7 @@ async def op_verify(
     settings: Settings,
     bot: Bot,
     op_gate: OpGate,
+    state: FSMContext,
     bot_username: str,
     is_admin: bool,
 ) -> None:
@@ -128,7 +164,7 @@ async def op_verify(
         await safe_answer(call, texts.banned_short(), alert=True)
         return
     chat_id = call.message.chat.id if call.message else db_user.id
-    kind, text, markup, _result = await _gate_device_or_op(
+    kind, text, markup, _result = await _gate_op(
         user=db_user,
         settings=settings,
         session=session,
@@ -138,17 +174,18 @@ async def op_verify(
         verify=True,
     )
     if kind != "ok":
-        alert = "Сначала подтвердите устройство" if kind == "device" else "Доступ ограничен"
-        if kind == "op":
-            alert = "Ещё не все подписки засчитаны"
+        alert = "Ещё не все подписки засчитаны" if kind == "op" else "Доступ ограничен"
         await safe_answer(call, alert, alert=True)
         await safe_edit(call.message, text, markup)
         return
     db_user.last_op_ok_at = datetime.now(UTC)
     await bump_activity(session, db_user, 1)
     await referrals.activate_if_ready(session, user=db_user, settings=settings)
+    await safe_answer(call, "Доступ открыт")
+    await _try_redeem_pending_promo(
+        session=session, user=db_user, settings=settings, state=state, reply=call
+    )
     home_text, home_markup = await render_home(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
-    await safe_answer(call, "Доступ открыт")
     await safe_edit(call.message, home_text, home_markup)

@@ -17,6 +17,22 @@ def normalize_code(raw: str) -> str:
     return raw.strip().upper().replace(" ", "")
 
 
+def parse_promo_payload(payload: str | None) -> str | None:
+    """``promo_ABCD`` / ``PROMO_abcd`` → normalized code, else None."""
+    if not payload:
+        return None
+    raw = payload.strip()
+    if not raw.lower().startswith("promo_"):
+        return None
+    code = normalize_code(raw[6:])
+    return code or None
+
+
+def activation_link(bot_username: str, code: str) -> str:
+    """Deep-link that opens the bot and activates the promo after OP."""
+    return f"https://t.me/{bot_username.lstrip('@')}?start=promo_{normalize_code(code)}"
+
+
 async def create_promo(
     session: AsyncSession,
     *,
