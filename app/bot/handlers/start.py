@@ -74,7 +74,11 @@ async def _try_redeem_pending_promo(
     await state.update_data(pending_promo=None)
     try:
         promo, amount = await promo_service.redeem(
-            session, user=user, code=str(code), settings=settings
+            session,
+            user=user,
+            code=str(code),
+            settings=settings,
+            skip_cooldown=True,
         )
     except EconomyError as exc:
         text = f"⚠️ {exc.message}"
@@ -135,11 +139,13 @@ async def cmd_start(
             await message.answer(pe.premiumize(text) if text else text, reply_markup=markup)
             return
         db_user.last_op_ok_at = datetime.now(UTC)
-    await bump_activity(session, db_user, 1)
-    await referrals.activate_if_ready(session, user=db_user, settings=settings)
+    # Redeem before bump_activity: bump stamps claim cooldown and would make
+    # promo.redeem raise «Слишком часто» on the same /start promo_ deep-link.
     await _try_redeem_pending_promo(
         session=session, user=db_user, settings=settings, state=state, reply=message
     )
+    await bump_activity(session, db_user, 1)
+    await referrals.activate_if_ready(session, user=db_user, settings=settings)
     text, markup = await render_home(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
@@ -179,12 +185,12 @@ async def op_verify(
         await safe_edit(call.message, text, markup)
         return
     db_user.last_op_ok_at = datetime.now(UTC)
-    await bump_activity(session, db_user, 1)
-    await referrals.activate_if_ready(session, user=db_user, settings=settings)
     await safe_answer(call, "Доступ открыт")
     await _try_redeem_pending_promo(
         session=session, user=db_user, settings=settings, state=state, reply=call
     )
+    await bump_activity(session, db_user, 1)
+    await referrals.activate_if_ready(session, user=db_user, settings=settings)
     home_text, home_markup = await render_home(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
