@@ -114,9 +114,13 @@ async def redeem(
     user: User,
     code: str,
     settings: Settings,
+    skip_cooldown: bool = False,
 ) -> tuple[PromoCode, int]:
     ensure_not_banned(user)
-    ensure_action_cooldown(user, settings)
+    # Deep-link Activate runs after /start bump_activity; cooldown must not
+    # eat the one-shot promo credit the user already requested.
+    if not skip_cooldown:
+        ensure_action_cooldown(user, settings)
     code = normalize_code(code)
     result = await session.execute(select(PromoCode).where(PromoCode.code == code))
     promo = result.scalar_one_or_none()

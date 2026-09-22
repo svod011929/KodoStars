@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.db.models import User
-from app.services import ledger, promo
-from app.services.errors import PromoError, ValidationError
+from app.services import antifraud, ledger, promo
+from app.services.errors import CooldownActive, PromoError, ValidationError
 
 
 async def _user(session, user_id: int) -> User:
@@ -77,3 +77,20 @@ async def test_delete_with_redemptions_deactivates(session, settings) -> None:
     fresh = await promo.create_promo(session, code="FRESH", reward=5)
     assert await promo.delete_promo(session, fresh.id) is True
     assert await promo.count_promos(session) == 1
+
+
+@pytest.mark.asyncio
+async def test_redeem_skip_cooldown_for_deeplink(session, settings) -> None:
+    """Activate deep-link must credit even if /start just stamped earn cooldown."""
+    antifraud.clear_earn_cooldowns()
+    cooled = settings.model_copy(update={"claim_cooldown_seconds": 10})
+    await promo.create_promo(session, code="LINK5", reward=5)
+    user = await _user(session, 606)
+    await antifraud.bump_activity(session, user, 1)
+    with pytest.raises(CooldownActive):
+        await promo.redeem(session, user=user, code="LINK5", settings=cooled)
+    promo_row, amount = await promo.redeem(
+        session, user=user, code="LINK5", settings=cooled, skip_cooldown=True
+    )
+    assert promo_row.code == "LINK5" and amount == 5
+    assert await ledger.get_balance(session, user.id) == 5
