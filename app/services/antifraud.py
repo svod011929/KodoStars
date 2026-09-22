@@ -1,4 +1,6 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
+import time
+from collections import OrderedDict
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.models import FraudEvent, ReferralEdge, User
 from app.services.errors import CooldownActive, UserBanned
+
+# Economy-action cooldown must NOT use ``User.last_action_at``: that column is
+# stamped on every update by ``upsert_user``, so a claim would always look like
+# it happened "just now" and ``ensure_action_cooldown`` would never pass.
+_last_earn_mono: OrderedDict[int, float] = OrderedDict()
+_MAX_EARN_TRACKED = 50_000
 
 
 async def record_event(
@@ -26,20 +34,35 @@ def ensure_not_banned(user: User) -> None:
 
 
 def ensure_action_cooldown(user: User, settings: Settings) -> None:
-    if not user.last_action_at or settings.claim_cooldown_seconds <= 0:
+    if settings.claim_cooldown_seconds <= 0:
         return
-    last = user.last_action_at
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=UTC)
-    elapsed = datetime.now(UTC) - last
-    wait = timedelta(seconds=settings.claim_cooldown_seconds)
+    last = _last_earn_mono.get(user.id)
+    if last is None:
+        return
+    elapsed = time.monotonic() - last
+    wait = float(settings.claim_cooldown_seconds)
     if elapsed < wait:
-        raise CooldownActive("Слишком часто. Подождите пару секунд.")
+        left = max(1, int(wait - elapsed + 0.999))
+        raise CooldownActive(f"Слишком часто. Подождите ещё ~{left} с.")
+
+
+def note_earn_action(user_id: int) -> None:
+    """Record that an economy action succeeded (starts the claim cooldown)."""
+    _last_earn_mono[user_id] = time.monotonic()
+    _last_earn_mono.move_to_end(user_id)
+    while len(_last_earn_mono) > _MAX_EARN_TRACKED:
+        _last_earn_mono.popitem(last=False)
+
+
+def clear_earn_cooldowns() -> None:
+    """Test helper."""
+    _last_earn_mono.clear()
 
 
 async def bump_activity(session: AsyncSession, user: User, points: int = 1) -> None:
     user.activity_score += max(points, 0)
     user.last_action_at = datetime.now(UTC)
+    note_earn_action(user.id)
     await session.flush()
 
 
