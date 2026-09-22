@@ -49,7 +49,7 @@ def home(pending: int = 0, amb_pending: int = 0) -> InlineKeyboardMarkup:
         [button("Статистика", "admin:stats", icon="stats"), button("Пользователи", "admin:users", icon="users")],
         [button(wd_label, "admin:wd", icon="withdraw"), button(amb_label, "admin:amb", icon="handshake")],
         [button("Рассылка", "admin:bc", icon="broadcast"), button("Каталог", "admin:catalog", icon="box")],
-        [button("PiarFlow", "admin:prov", icon="lock"), button("Система", "admin:system", icon="admin")],
+        [button("ОП", "admin:prov", icon="lock"), button("Система", "admin:system", icon="admin")],
         [button("Настройки", "admin:set", icon="settings"), button("В меню", "menu:home", icon="home")],
     )
 
