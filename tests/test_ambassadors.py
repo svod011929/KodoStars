@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -130,3 +131,52 @@ async def test_submit_approve_claim_daily_and_revoke(session: AsyncSession, sett
     await amb.revoke_slot(session, slot_id=slot.id, admin_id=1)
     terms2 = await amb.effective_referral_terms(session, 10, settings)
     assert terms2.l1_bonus == settings.referral_l1_bonus
+
+
+@pytest.mark.asyncio
+async def test_referral_bonus_uses_ambassador_terms(session: AsyncSession, settings: Settings) -> None:
+    from app.db.models import LedgerEntry, LedgerKind, ReferralEdge
+    from app.services import referrals
+
+    settings.referral_min_piarflow_subs = 0
+    settings.device_check_enabled = False
+    settings.min_referral_activity = 0
+
+    referrer = User(id=100, first_name="Ref", xp=0)
+    referee = User(
+        id=101,
+        first_name="Ee",
+        referred_by_id=100,
+        referral_activated=False,
+        activity_score=10,
+    )
+    session.add_all([referrer, referee])
+    await session.flush()
+    session.add(ReferralEdge(referrer_id=100, referee_id=101, level=1))
+    await amb.submit_application(
+        session, user=referrer, kind="bot", title="B", invite_link="https://t.me/ambot"
+    )
+    slots = await amb.list_user_slots(session, 100)
+    await amb.approve_slot(
+        session,
+        slot_id=slots[0].id,
+        admin_id=1,
+        l1_bonus=77,
+        l1_percent=15,
+        l2_bonus=3,
+        l2_percent=5,
+        promo_reward=5,
+        promo_max_uses=10,
+    )
+    await session.commit()
+
+    await referrals.activate_if_ready(session, user=referee, settings=settings, boost_bp=100)
+    await session.commit()
+
+    result = await session.execute(
+        select(LedgerEntry).where(
+            LedgerEntry.user_id == 100, LedgerEntry.kind == LedgerKind.REFERRAL_BONUS.value
+        )
+    )
+    entry = result.scalar_one()
+    assert entry.amount == 77

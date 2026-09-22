@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import LedgerEntry, LedgerKind, ReferralEdge, User
+from app.services import ambassadors as amb_service
 from app.services import events, ledger
 from app.services.antifraud import record_event
 from app.services.devices import is_device_ok, referral_blocked_by_twink
@@ -142,12 +143,17 @@ async def activate_if_ready(
     )
     edges = list(result.scalars().all())
     now = datetime.now(UTC)
+    terms_cache: dict[int, amb_service.ReferralTerms] = {}
     for edge in edges:
         referrer = await session.get(User, edge.referrer_id)
         if referrer is None or referrer.is_banned:
             edge.credited_at = now
             continue
-        bonus = settings.referral_bonus(edge.level)
+        if referrer.id not in terms_cache:
+            terms_cache[referrer.id] = await amb_service.effective_referral_terms(
+                session, referrer.id, settings
+            )
+        bonus = terms_cache[referrer.id].bonus(edge.level)
         if bonus <= 0:
             edge.credited_at = now
             continue
@@ -192,12 +198,17 @@ async def share_earning(
     if base_amount <= 0 or not earner.referral_activated:
         return
     result = await session.execute(select(ReferralEdge).where(ReferralEdge.referee_id == earner.id))
+    terms_cache: dict[int, amb_service.ReferralTerms] = {}
     for edge in result.scalars().all():
-        percent = settings.referral_percent(edge.level)
-        if percent <= 0:
-            continue
         referrer = await session.get(User, edge.referrer_id)
         if referrer is None or referrer.is_banned:
+            continue
+        if referrer.id not in terms_cache:
+            terms_cache[referrer.id] = await amb_service.effective_referral_terms(
+                session, referrer.id, settings
+            )
+        percent = terms_cache[referrer.id].percent(edge.level)
+        if percent <= 0:
             continue
         share = (base_amount * percent) // 100
         if share <= 0:
