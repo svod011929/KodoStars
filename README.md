@@ -27,9 +27,10 @@ Telegram-бот на **Python 3.12 / aiogram 3**: реферальная эко�
 задания, промокоды, бусты за **Telegram Stars (XTR)**, очередь выводов с холдом средств и
 полноценная **админ-панель внутри Telegram**.
 
-Монетизация трафика — обязательная подписка (**только PiarFlow**): проверка устройства/твинков
-до выдачи заданий, вебхук отписок со штрафом, реферальный бонус только после ≥N оплаченных
-подписок PiarFlow. Выплата Stars пользователям — через **Fragment** (mnemonic + cookies).
+Монетизация трафика — обязательная подписка (**Tgrass + PiarFlow**): Tgrass можно
+показывать до проверки устройства/твинков; PiarFlow — только после. Вебхуки отписок
+со штрафом, реферальный бонус только после ≥N оплаченных подписок PiarFlow.
+Выплата Stars пользователям — через **Fragment** (mnemonic + cookies).
 UI использует Telegram **premium emoji** (`<tg-emoji>` в сообщениях, `icon_custom_emoji_id` на кнопках).
 Эмодзи **валюты** (баланс, награды) задаётся через `CURRENCY_EMOJI_ID` / `CURRENCY_EMOJI_FALLBACK`
 и меняется в рантайме: **Админка → Настройки** — numeric id, разметка
@@ -147,7 +148,7 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 | Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, **`REFERRAL_MIN_PIARFLOW_SUBS`**, `NOTIFY_REFERRER`, ежедневка, `SIGNUP_BONUS`, `CLAIM_COOLDOWN_SECONDS`, **`CURRENCY_EMOJI_ID`**, **`CURRENCY_EMOJI_FALLBACK`** |
 | Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS`, `PAYOUT_LOG_CHAT_ID` |
 | Операционные | `MAINTENANCE_MODE`, `MAINTENANCE_TEXT`, `BROADCAST_RATE_PER_SEC`, `THROTTLE_SECONDS` |
-| PiarFlow | `PIARFLOW_ENABLED`, `PIARFLOW_API_KEY`, `PIARFLOW_API_URL`, `PIARFLOW_MAX_SPONSORS`, `PIARFLOW_UNSUB_PENALTY` |
+| PiarFlow / Tgrass | `PIARFLOW_*`, `TGRASS_*` (ключи, лимиты, штрафы за отписку) |
 | BotoHub Views | `BOTOHUB_VIEWS_ENABLED`, `BOTOHUB_VIEWS_TOKEN`, `BOTOHUB_VIEWS_COOLDOWN_SECONDS`, опционально `BOTOHUB_VIEWS_API_URL` |
 | Fragment | `FRAGMENT_WALLET_MNEMONIC`, `FRAGMENT_COOKIES`, опционально `FRAGMENT_TONAPI_KEY`, `FRAGMENT_WALLET_VERSION`, `FRAGMENT_SHOW_SENDER` |
 | Логи | `LOG_LEVEL`, `LOG_JSON` |
@@ -181,7 +182,8 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 - Раздел **Антифрод → Твинки** показывает кластеры «одно устройство — несколько аккаунтов».
 
 Эндпоинты: `GET /` (лендинг), `GET /health`, `GET /verify` (Mini App), `POST /api/device`
-(лимит 20 запросов/мин с IP), `POST /api/piarflow/webhook` (отписки).
+(лимит 20 запросов/мин с IP), `POST /api/piarflow/webhook`,
+`POST /api/tgrass/webhook`, `POST /api/tgrass/unsubscribe`.
 
 ## Вывод Stars
 
@@ -210,19 +212,36 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 `refundStarPayment`, списывает начисленные Stars пака или мгновенно отключает множитель.
 Команды `/paysupport` и `/terms` отвечают требованиям Telegram к ботам, принимающим Stars.
 
-## ОП — только PiarFlow
+## ОП — Tgrass + PiarFlow
 
-Каскад обязательной подписки состоит из **одного** провайдера. Flyer / SubGram / BotoHub /
-TGrass / Trafsly / manual-каналы ОП удалены.
-
-Порядок гейта:
+Каскад обязательной подписки:
 
 1. Бан → отказ.
-2. Устройство / твинк (`DEVICE_CHECK_FOR_OP`, `TWINK_BLOCK_OP`) — **до** любого HTTP к PiarFlow.
-3. `POST /sponsors` → спонсоры со статусом не `subscribed` / `not_counted` показываются кнопками.
-4. «Я подписался» → `POST /sponsors/check` по выданным `links`.
-5. Ссылки со статусом **`subscribed`** пишутся в `piarflow_paid_subs` и учитываются для
+2. **Tgrass** (`PRE_DEVICE`) — можно показывать спонсоров **до** проверки устройства/твинка.
+3. Устройство / твинк (`DEVICE_CHECK_FOR_OP`, `TWINK_BLOCK_OP`).
+4. **PiarFlow** (`POST_DEVICE`) — только после антитвинка.
+5. Ссылки PiarFlow со статусом **`subscribed`** пишутся в `piarflow_paid_subs` и учитываются для
    реферального бонуса (`REFERRAL_MIN_PIARFLOW_SUBS`).
+
+### Tgrass
+
+| | |
+| --- | --- |
+| Документация | [tgrass.space/integration](https://tgrass.space/integration) |
+| Выдача / проверка | `POST /offers`, заголовок `Auth: <key>` |
+| Статусы ответа | `ok` / `not_ok` / `no_offers`; у оффера `subscribed: bool` |
+| Без ключа | `OpResult.skip` |
+| Ошибка API | fail-open |
+
+Вебхуки (@tgrassbot → Webhook):
+
+- Отписки: `POST {WEB_PUBLIC_URL}/api/tgrass/unsubscribe`
+  (`tg_user_id`, `offer_link`, `status: unsubscribed`) → сброс `last_op_ok_at`, штраф
+  `TGRASS_UNSUB_PENALTY`, уведомление. Идемпотентность: `tgrass_unsubs` (миграция `0009`).
+- Задания: `POST {WEB_PUBLIC_URL}/api/tgrass/webhook`
+  (`tg_user_id`, `offer_id`, `offer_link`, `timestamp`) → ack + запись в антифрод-ленту.
+
+### PiarFlow
 
 | | |
 | --- | --- |
@@ -233,12 +252,11 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 | Без ключа | `OpResult.skip` (не блокирует) |
 | Ошибка API | fail-open |
 
-Админ может выключить PiarFlow в рантайме (таблица `provider_states`).
-В **Админка → PiarFlow** и **Статистика → PiarFlow трафик** — выданные спонсоры,
-засчитанные (`subscribed`) и конверсия; списки с пагинацией.
-Учёт: `piarflow_issued_subs` (выдача) и `piarflow_paid_subs` (зачёт).
+Админ может выключить провайдеров в рантайме (таблица `provider_states`).
+В **Админка → PiarFlow** — тумблеры + статистика выданных/засчитанных спонсоров.
+Учёт PiarFlow: `piarflow_issued_subs` (выдача) и `piarflow_paid_subs` (зачёт).
 
-### Вебхук отписок
+### Вебхук отписок PiarFlow
 
 `POST {WEB_PUBLIC_URL}/api/piarflow/webhook`
 
@@ -274,7 +292,7 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 ## Миграции
 
 Схема управляется Alembic (`app/migrations`). При старте бот сам приводит БД к актуальной ревизии
-(сейчас head — `0008_ambassador_slots`):
+(сейчас head — `0009_tgrass_unsubs`):
 
 - пустая БД → создаётся с нуля;
 - БД от версии 0.1 (`create_all`, без `alembic_version`) → штампуется `0001_baseline` и обновляется;
@@ -283,7 +301,8 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 Ключевые ревизии после 1.1.0: `0005_piarflow_fragment` (вебхук отписок),
 `0006_piarflow_paid_subs` (учёт оплаченных подписок для рефералки),
 `0007_piarflow_issued_subs` (учёт выданных спонсоров для статистики),
-`0008_ambassador_slots` (амбассадоры: заявки, кастомные реф-условия, дневные промо).
+`0008_ambassador_slots` (амбассадоры),
+`0009_tgrass_unsubs` (Tgrass вебхук отписок).
 
 ```bash
 alembic current
@@ -331,10 +350,10 @@ app/
   services/              # ledger, referrals, daily, tasks, boosts, payments, withdrawals,
                          # promo, access, audit, broadcasts, stats, antifraud, devices,
                          # ambassadors, botohub_views, fragment, piarflow_webhook, …
-  op/                    # OpGate + адаптер piarflow
-  web/                   # Mini App + /api/device + /api/piarflow/webhook
+  op/                    # OpGate + адаптеры tgrass (pre-device) / piarflow (post-device)
+  web/                   # Mini App + /api/device + piarflow/tgrass webhooks
   db/                    # models, session, seed, migrate
-  migrations/            # Alembic env + versions (…0008_ambassador_slots)
+  migrations/            # Alembic env + versions (…0009_tgrass_unsubs)
 tests/
 docs/superpowers/specs/
 CONTRIBUTORS.md

@@ -831,12 +831,17 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
 
 def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
     lines = [
-        "🔒 <b>PiarFlow</b>",
+        "🔒 <b>Провайдеры ОП</b>",
         "",
-        "Единственный провайдер обязательной подписки. "
+        "Порядок: <b>Tgrass</b> (можно до проверки устройства) → антитвинк → "
+        "<b>PiarFlow</b> (только после проверки).",
         "Ошибки API — fail-open (не блокируют пользователей).",
-        "Вебхук отписок: <code>/api/piarflow/webhook</code> на вашем HTTPS.",
-        "Статистика выданных и засчитанных спонсоров — кнопки ниже.",
+        "",
+        "Вебхуки отписок:",
+        "• PiarFlow: <code>/api/piarflow/webhook</code>",
+        "• Tgrass: <code>/api/tgrass/unsubscribe</code> (задания: <code>/api/tgrass/webhook</code>)",
+        "",
+        "Статистика выданных и засчитанных спонсоров PiarFlow — кнопки ниже.",
         "",
     ]
     for name in CASCADE:

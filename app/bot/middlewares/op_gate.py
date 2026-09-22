@@ -11,7 +11,7 @@ from app.bot.middlewares.events import unwrap_event
 from app.bot.render import device_url_for
 from app.config import Settings
 from app.db.models import User
-from app.op.base import OpContext
+from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
 from app.services import piarflow_quality
 from app.services.devices import op_access_block_reason
@@ -55,13 +55,6 @@ class OpGateMiddleware(BaseMiddleware):
         if _op_fresh(user, settings.op_cache_sec):
             return await handler(event, data)
 
-        block = op_access_block_reason(user, settings)
-        if block is not None:
-            await _reply_device_or_twink(inner, user, settings, block)
-            if isinstance(inner, CallbackQuery):
-                await inner.answer()
-            return None
-
         ctx = OpContext(
             user_id=user.id,
             chat_id=_chat_id(event, user.id),
@@ -71,17 +64,31 @@ class OpGateMiddleware(BaseMiddleware):
             is_premium=user.is_premium,
             bot=bot,
         )
-        result = await self._gate.enforce(ctx, session, settings=settings)
-        await piarflow_quality.record_from_op_result(session, user.id, result)
-        if result.allowed:
-            user.last_op_ok_at = datetime.now(UTC)
-            return await handler(event, data)
 
-        markup = keyboards.op_keyboard(result.sponsors)
-        await _reply(inner, texts.op_blocked(result.provider, result.message), markup)
-        if isinstance(inner, CallbackQuery):
-            await inner.answer()
-        return None
+        # 1) Tgrass (and any PRE_DEVICE providers) — OK to show before twin check.
+        pre = await self._gate.enforce(ctx, session, settings=settings, stage="pre_device")
+        await piarflow_quality.record_from_op_result(session, user.id, pre)
+        if not pre.allowed:
+            await _reply_blocked(inner, pre)
+            return None
+
+        # 2) Device / twin — required before PiarFlow.
+        block = op_access_block_reason(user, settings)
+        if block is not None:
+            await _reply_device_or_twink(inner, user, settings, block)
+            if isinstance(inner, CallbackQuery):
+                await inner.answer()
+            return None
+
+        # 3) PiarFlow (POST_DEVICE).
+        post = await self._gate.enforce(ctx, session, settings=settings, stage="post_device")
+        await piarflow_quality.record_from_op_result(session, user.id, post)
+        if not post.allowed:
+            await _reply_blocked(inner, post)
+            return None
+
+        user.last_op_ok_at = datetime.now(UTC)
+        return await handler(event, data)
 
 
 def _should_skip(event: TelegramObject, settings: Settings) -> bool:
@@ -114,6 +121,14 @@ def _chat_id(event: TelegramObject, fallback: int) -> int:
     if isinstance(event, CallbackQuery) and event.message and event.message.chat:
         return event.message.chat.id
     return fallback
+
+
+async def _reply_blocked(event: TelegramObject, result: OpResult) -> None:
+    inner = unwrap_event(event)
+    markup = keyboards.op_keyboard(result.sponsors)
+    await _reply(inner, texts.op_blocked(result.provider, result.message), markup)
+    if isinstance(inner, CallbackQuery):
+        await inner.answer()
 
 
 async def _reply_device_or_twink(

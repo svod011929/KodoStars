@@ -416,6 +416,19 @@ class PiarflowUnsub(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class TgrassUnsub(Base):
+    """Idempotent log of Tgrass unsubscribe webhooks (one row per user+offer)."""
+
+    __tablename__ = "tgrass_unsubs"
+    __table_args__ = (UniqueConstraint("tg_user_id", "offer_link", name="uq_tgrass_unsub"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tg_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    offer_link: Mapped[str] = mapped_column(String(512))
+    penalty: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class DeviceCheck(Base):
     """One Mini App verification: who, from which device fingerprint and IP."""
 

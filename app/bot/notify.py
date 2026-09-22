@@ -81,6 +81,11 @@ class Notifier:
                     payload["user_id"],
                     texts.notify_piarflow_unsubscribed(int(payload.get("penalty") or 0)),
                 )
+            case "tgrass_unsubscribed":
+                await self._send(
+                    payload["user_id"],
+                    texts.notify_piarflow_unsubscribed(int(payload.get("penalty") or 0)),
+                )
             case "referral_joined":
                 await self._send(
                     payload["referrer_id"], texts.notify_referral_joined(payload["referee_name"])

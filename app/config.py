@@ -43,6 +43,7 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "twink_require_ip_match": bool,
     "twink_ip_window_days": int,
     "piarflow_unsub_penalty": int,
+    "tgrass_unsub_penalty": int,
     "currency_emoji_id": str,
     "currency_emoji_fallback": str,
     "botohub_views_enabled": bool,
@@ -84,6 +85,7 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "twink_require_ip_match": "Антитвинк: считать твинком только при совпадении IP",
     "twink_ip_window_days": "Антитвинк: окно совпадения IP, дней",
     "piarflow_unsub_penalty": "PiarFlow: штраф за отписку, ⭐",
+    "tgrass_unsub_penalty": "Tgrass: штраф за отписку, ⭐",
     "currency_emoji_id": "Валюта: ID премиум-эмодзи",
     "currency_emoji_fallback": "Валюта: unicode-fallback эмодзи",
     "botohub_views_enabled": "BotoHub Views: показы включены",
@@ -134,6 +136,7 @@ SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
     "traffic": (
         "op_cache_sec",
         "piarflow_unsub_penalty",
+        "tgrass_unsub_penalty",
         "botohub_views_enabled",
         "botohub_views_token",
         "botohub_views_cooldown_seconds",
@@ -241,6 +244,14 @@ class Settings(BaseSettings):
     piarflow_max_sponsors: int = 5
     piarflow_unsub_penalty: int = 10
 
+    # Tgrass — https://tgrass.space/integration (POST /offers, Auth header).
+    # Shown before device/twin checks (PRE_DEVICE_CASCADE).
+    tgrass_enabled: bool = True
+    tgrass_api_key: str = ""
+    tgrass_api_url: str = "https://tgrass.space"
+    tgrass_max_sponsors: int = 5
+    tgrass_unsub_penalty: int = 10
+
     # Premium custom-emoji for the internal Stars currency (messages + icon="star").
     currency_emoji_id: str = _DEFAULT_CURRENCY_EMOJI_ID
     currency_emoji_fallback: str = _DEFAULT_CURRENCY_FALLBACK
@@ -291,6 +302,7 @@ class Settings(BaseSettings):
         "claim_cooldown_seconds",
         "op_cache_sec",
         "piarflow_unsub_penalty",
+        "tgrass_unsub_penalty",
         "botohub_views_cooldown_seconds",
     )
     @classmethod

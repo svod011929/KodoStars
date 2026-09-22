@@ -42,24 +42,35 @@ async def _gate_device_or_op(
     op_gate: OpGate,
     verify: bool = False,
 ) -> tuple[str, str | None, object | None, OpResult | None]:
-    """Run twin/device checks first; only then call PiarFlow."""
+    """Tgrass first (pre-device), then twin/device, then PiarFlow."""
+    ctx = _ctx(user, chat_id, bot)
+
+    pre = await op_gate.enforce(ctx, session, verify=verify, settings=settings, stage="pre_device")
+    await piarflow_quality.record_from_op_result(session, user.id, pre)
+    if not pre.allowed:
+        return (
+            "op",
+            texts.op_blocked(pre.provider, pre.message),
+            keyboards.op_keyboard(pre.sponsors),
+            pre,
+        )
+
     block = op_access_block_reason(user, settings)
     if block == "device":
         url = device_url_for(user, settings) or settings.web_url("verify")
         return "device", texts.op_need_device(), keyboards.device_gate_keyboard(url), None
     if block == "twink":
         return "twink", texts.op_twink_blocked(settings.support_contact), None, None
-    result = await op_gate.enforce(
-        _ctx(user, chat_id, bot), session, verify=verify, settings=settings
-    )
-    await piarflow_quality.record_from_op_result(session, user.id, result)
-    if result.allowed:
-        return "ok", None, None, result
+
+    post = await op_gate.enforce(ctx, session, verify=verify, settings=settings, stage="post_device")
+    await piarflow_quality.record_from_op_result(session, user.id, post)
+    if post.allowed:
+        return "ok", None, None, post
     return (
         "op",
-        texts.op_blocked(result.provider, result.message),
-        keyboards.op_keyboard(result.sponsors),
-        result,
+        texts.op_blocked(post.provider, post.message),
+        keyboards.op_keyboard(post.sponsors),
+        post,
     )
 
 

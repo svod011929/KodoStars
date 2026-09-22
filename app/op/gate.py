@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from typing import Literal, assert_never
 
 import structlog
 from sqlalchemy import select
@@ -9,18 +10,26 @@ from app.db.models import ProviderState
 from app.db.txn import commit_before_io
 from app.op.base import OpAdapter, OpContext, OpResult
 from app.op.piarflow import PiarFlowAdapter
+from app.op.tgrass import TgrassAdapter
 
 log = structlog.get_logger("kodostars.op")
 
-CASCADE: tuple[str, ...] = ("piarflow",)
+# Tgrass may be shown before device/twin checks; PiarFlow only after.
+PRE_DEVICE_CASCADE: tuple[str, ...] = ("tgrass",)
+POST_DEVICE_CASCADE: tuple[str, ...] = ("piarflow",)
+CASCADE: tuple[str, ...] = PRE_DEVICE_CASCADE + POST_DEVICE_CASCADE
 
 PROVIDER_TITLES: dict[str, str] = {
+    "tgrass": "Tgrass",
     "piarflow": "PiarFlow",
 }
 
 PROVIDER_DOCS: dict[str, str] = {
+    "tgrass": "https://tgrass.space/integration",
     "piarflow": "https://piarflow.com/api-docs",
 }
+
+Stage = Literal["pre_device", "post_device", "all"]
 
 
 class OpGate:
@@ -36,14 +45,16 @@ class OpGate:
         *,
         verify: bool = False,
         settings: Settings | None = None,
+        stage: Stage = "all",
     ) -> OpResult:
         effective = settings or self._settings
         ctx.settings = effective
         enabled = await enabled_providers(session, effective)
         # Provider checks are network round trips: release the SQLite write lock first.
         await commit_before_io()
+        names = _stage_names(stage)
         paid_links: list[str] = []
-        for name in CASCADE:
+        for name in names:
             if name not in enabled:
                 continue
             adapter = self._by_name.get(name)
@@ -55,6 +66,7 @@ class OpGate:
             log.info(
                 "op_provider_result",
                 provider=name,
+                stage=stage,
                 allowed=result.allowed,
                 skipped=result.skipped,
                 fail_open=result.fail_open,
@@ -69,19 +81,34 @@ class OpGate:
         return OpResult.ok("gate", paid_links=list(dict.fromkeys(paid_links)))
 
 
+def _stage_names(stage: Stage) -> tuple[str, ...]:
+    if stage == "pre_device":
+        return PRE_DEVICE_CASCADE
+    if stage == "post_device":
+        return POST_DEVICE_CASCADE
+    if stage == "all":
+        return CASCADE
+    assert_never(stage)
+
+
 def default_adapters(settings: Settings) -> list[OpAdapter]:
-    return [PiarFlowAdapter(settings)]
+    return [TgrassAdapter(settings), PiarFlowAdapter(settings)]
 
 
 def provider_configured(name: str, settings: Settings) -> bool:
     """Whether the provider has credentials and would do real work."""
+    if name == "tgrass":
+        return bool(settings.tgrass_api_key.strip())
     if name == "piarflow":
         return bool(settings.piarflow_api_key.strip())
     return False
 
 
 async def enabled_providers(session: AsyncSession, settings: Settings) -> set[str]:
-    defaults = {"piarflow": settings.piarflow_enabled}
+    defaults = {
+        "tgrass": settings.tgrass_enabled,
+        "piarflow": settings.piarflow_enabled,
+    }
     result = await session.execute(select(ProviderState))
     rows = {row.name: row.enabled for row in result.scalars().all()}
     enabled = set()

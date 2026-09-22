@@ -87,9 +87,9 @@ async def test_check_channels_uses_entry_link_and_title() -> None:
     ]
 
 
-def test_default_adapters_only_piarflow() -> None:
+def test_default_adapters_tgrass_then_piarflow() -> None:
     adapters = default_adapters(_settings())
-    assert [a.name for a in adapters] == ["piarflow"]
+    assert [a.name for a in adapters] == ["tgrass", "piarflow"]
 
 
 def test_title_from_link() -> None:
