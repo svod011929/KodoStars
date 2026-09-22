@@ -13,7 +13,7 @@ from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
-from app.services import piarflow_quality, referrals, users
+from app.services import botohub_views, piarflow_quality, referrals, users
 from app.services.antifraud import bump_activity
 from app.services.devices import op_access_block_reason
 
@@ -109,6 +109,8 @@ async def cmd_start(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
     await message.answer(pe.premiumize(text) if text else text, reply_markup=markup)
+    if first_start:
+        botohub_views.schedule_hi(db_user.id, settings)
 
 
 @router.callback_query(F.data == "op:verify")

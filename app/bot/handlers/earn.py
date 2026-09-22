@@ -7,7 +7,7 @@ from app.bot import keyboards, texts
 from app.bot.utils import parse_id, safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import BoostProduct, Task, User
-from app.services import daily
+from app.services import botohub_views, daily
 from app.services import tasks as task_service
 from app.services.boosts import active_boosts, get_product, list_products
 from app.services.boosts import describe as boost_detail
@@ -43,6 +43,7 @@ async def daily_claim(call: CallbackQuery, session: AsyncSession, db_user: User,
         return
     await safe_answer(call, f"+{claim.amount} ⭐")
     await safe_edit(call.message, texts.daily_ok(claim.amount, claim.streak), keyboards.daily_menu(True))
+    botohub_views.schedule_ad(db_user.id, settings)
 
 
 # --- tasks --------------------------------------------------------------------------
@@ -95,6 +96,7 @@ async def task_do(
     task = await session.get(Task, task_id)
     if task is not None:
         await safe_edit(call.message, texts.task_card(task, True), keyboards.task_card(task, True))
+    botohub_views.schedule_ad(db_user.id, settings)
 
 
 # --- boosts -------------------------------------------------------------------------

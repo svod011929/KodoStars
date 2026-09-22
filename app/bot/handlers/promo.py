@@ -9,6 +9,7 @@ from app.bot.handlers.states import UserFSM
 from app.bot.utils import safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import User
+from app.services import botohub_views
 from app.services import promo as promo_service
 from app.services.errors import EconomyError
 
@@ -37,3 +38,4 @@ async def promo_enter(
         return
     await state.clear()
     await message.answer(texts.promo_ok(promo, amount), reply_markup=keyboards.back_home())
+    botohub_views.schedule_ad(db_user.id, settings)

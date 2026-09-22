@@ -45,6 +45,10 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "piarflow_unsub_penalty": int,
     "currency_emoji_id": str,
     "currency_emoji_fallback": str,
+    "botohub_views_enabled": bool,
+    "botohub_views_token": str,
+    "botohub_views_cooldown_seconds": int,
+    "botohub_views_api_url": str,
 }
 
 RUNTIME_SETTING_LABELS: dict[str, str] = {
@@ -81,6 +85,10 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "piarflow_unsub_penalty": "PiarFlow: штраф за отписку, ⭐",
     "currency_emoji_id": "Валюта: ID премиум-эмодзи",
     "currency_emoji_fallback": "Валюта: unicode-fallback эмодзи",
+    "botohub_views_enabled": "BotoHub Views: показы включены",
+    "botohub_views_token": "BotoHub Views: API-токен",
+    "botohub_views_cooldown_seconds": "BotoHub Views: пауза между показами, с",
+    "botohub_views_api_url": "BotoHub Views: URL SendPost",
 }
 
 
@@ -152,6 +160,12 @@ class Settings(BaseSettings):
     currency_emoji_id: str = _DEFAULT_CURRENCY_EMOJI_ID
     currency_emoji_fallback: str = _DEFAULT_CURRENCY_FALLBACK
 
+    # BotoHub Views — https://views.botohub.me/integration (ad impressions, not OP).
+    botohub_views_enabled: bool = False
+    botohub_views_token: str = ""
+    botohub_views_cooldown_seconds: int = 60
+    botohub_views_api_url: str = "https://views.botohub.me/ad/SendPost"
+
     # Fragment — Stars payouts. Keep mnemonic/cookies ONLY in server .env.
     fragment_wallet_mnemonic: str = ""
     fragment_cookies: str = ""
@@ -192,6 +206,7 @@ class Settings(BaseSettings):
         "claim_cooldown_seconds",
         "op_cache_sec",
         "piarflow_unsub_penalty",
+        "botohub_views_cooldown_seconds",
     )
     @classmethod
     def _non_negative(cls, value: int) -> int:

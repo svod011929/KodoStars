@@ -148,6 +148,7 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 | Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS` |
 | Операционные | `MAINTENANCE_MODE`, `MAINTENANCE_TEXT`, `BROADCAST_RATE_PER_SEC`, `THROTTLE_SECONDS` |
 | PiarFlow | `PIARFLOW_ENABLED`, `PIARFLOW_API_KEY`, `PIARFLOW_API_URL`, `PIARFLOW_MAX_SPONSORS`, `PIARFLOW_UNSUB_PENALTY` |
+| BotoHub Views | `BOTOHUB_VIEWS_ENABLED`, `BOTOHUB_VIEWS_TOKEN`, `BOTOHUB_VIEWS_COOLDOWN_SECONDS`, опционально `BOTOHUB_VIEWS_API_URL` |
 | Fragment | `FRAGMENT_WALLET_MNEMONIC`, `FRAGMENT_COOKIES`, опционально `FRAGMENT_TONAPI_KEY`, `FRAGMENT_WALLET_VERSION`, `FRAGMENT_SHOW_SENDER` |
 | Логи | `LOG_LEVEL`, `LOG_JSON` |
 
@@ -248,6 +249,17 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 `@username|Название` или `-100…|https://t.me/+ссылка|Название`. Бот должен быть админом
 канала для `getChatMember`. Это **не** каскад ОП — только каталог заданий.
 
+## BotoHub Views (показы)
+
+Монетизация показами рекламы ([документация](https://views.botohub.me/integration)), отдельно от ОП.
+
+- `POST https://views.botohub.me/ad/SendPost`, заголовок `Authorization: <token>` **без** Bearer.
+- `hi: true` — только на **первый** `/start` пользователя.
+- Обычный показ — после успешной ежедневки, зачёта задания или промокода (с паузой
+  `BOTOHUB_VIEWS_COOLDOWN_SECONDS`, по умолчанию 60 с).
+- Вкл/выкл, токен, кулдаун и URL — в **Админка → Настройки** (или `.env`).
+- Ошибки API / нет объявлений — fail-open, бот работает как обычно.
+
 ### Как добавить OP-провайдера (если понадобится)
 
 1. Создайте `app/op/myprovider.py` с `name`, `check`, `verify` → `OpResult`.
@@ -314,7 +326,7 @@ app/
     notify.py            # доменные события → Telegram
   services/              # ledger, referrals, daily, tasks, boosts, payments, withdrawals,
                          # promo, access, audit, broadcasts, stats, antifraud, devices,
-                         # ambassadors, fragment, piarflow_webhook, piarflow_quality, …
+                         # ambassadors, botohub_views, fragment, piarflow_webhook, …
   op/                    # OpGate + адаптер piarflow
   web/                   # Mini App + /api/device + /api/piarflow/webhook
   db/                    # models, session, seed, migrate
