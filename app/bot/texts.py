@@ -181,7 +181,8 @@ def profile(
         f"⚡ Активность: {user.activity_score}",
         f"👥 Рефералы: L1 — {refs.get(1, 0)}, L2 — {refs.get(2, 0)}",
         f"💎 Заработано с рефералов: {ref_earned} {STAR}",
-        f"🎯 Активация рефки: {'да' if user.referral_activated else 'ещё нет'}",
+        f"🎯 Ты активирован для своего реферера: "
+        f"{'да ✅' if user.referral_activated else 'ещё нет (нужны активность и подписки)'}",
         f"📅 С нами с: {fmt_dt(user.created_at, with_time=False)}",
     ]
     if boosts:
@@ -211,6 +212,52 @@ def history(entries: Sequence[LedgerEntry], page: int, total: int, page_size: in
     return "\n".join(lines)
 
 
+def _plural_ru(n: int, one: str, few: str, many: str) -> str:
+    n = abs(int(n)) % 100
+    if 11 <= n <= 14:
+        return many
+    n = n % 10
+    if n == 1:
+        return one
+    if 2 <= n <= 4:
+        return few
+    return many
+
+
+def referral_activation_rules(settings: Settings) -> list[str]:
+    """User-facing checklist: what a friend must do before you get the bonus."""
+    activity = max(int(settings.min_referral_activity), 0)
+    subs = max(int(settings.referral_min_piarflow_subs), 0)
+    rules: list[str] = [
+        "1. Запустить бота по <b>твоей</b> ссылке (первый /start).",
+    ]
+    if activity > 0:
+        rules.append(
+            f"2. Набрать активность в боте: минимум <b>{activity}</b> "
+            f"{_plural_ru(activity, 'действие', 'действия', 'действий')} "
+            "(ежедневка, задания, промокод и т.п.)."
+        )
+    else:
+        rules.append("2. Проявить активность в боте (ежедневка, задания).")
+    step = 3
+    if subs > 0:
+        noun = _plural_ru(subs, "спонсора", "спонсоров", "спонсоров")
+        rules.append(
+            f"{step}. Пройти обязательную подписку и получить награду "
+            f"минимум за <b>{subs}</b> {noun} (подписка должна засчитаться)."
+        )
+        step += 1
+    if settings.device_check_active:
+        rules.append(
+            f"{step}. Подтвердить устройство кнопкой в боте "
+            "(один человек — один аккаунт; твинки не оплачиваются)."
+        )
+        step += 1
+    elif settings.twink_block_referral:
+        rules.append(f"{step}. Не быть вторым аккаунтом с того же устройства (твинки не оплачиваются).")
+    return rules
+
+
 def referrals(
     user: User,
     link: str,
@@ -224,25 +271,29 @@ def referrals(
     lines = [
         "👥 <b>Рефералы</b>",
         "",
-        f"L1 (твои друзья): <b>{settings.referral_l1_bonus} {STAR}</b> за активацию + "
-        f"<b>{settings.referral_l1_percent}%</b> с их заработка.",
+        "<b>Что ты получаешь</b>",
+        f"• За друга (L1): <b>{settings.referral_l1_bonus} {STAR}</b> после его активации + "
+        f"<b>{settings.referral_l1_percent}%</b> с его заработка.",
     ]
     if settings.referral_levels >= 2:
         lines.append(
-            f"L2 (друзья друзей): <b>{settings.referral_l2_bonus} {STAR}</b> + "
+            f"• За друга друга (L2): <b>{settings.referral_l2_bonus} {STAR}</b> + "
             f"<b>{settings.referral_l2_percent}%</b>."
         )
     lines += [
-        f"Активация — когда друг набирает {settings.min_referral_activity} очк. активности "
-        f"и подписывается минимум на {settings.referral_min_piarflow_subs} ресурса PiarFlow "
-        "с начисленной наградой в интеграции.",
+        "",
+        "<b>Когда друг считается активным</b>",
+        "Бонус приходит не сразу после перехода — друг должен выполнить условия:",
+        *referral_activation_rules(settings),
+        "",
+        "⏳ в списке ниже — ещё не активирован · ✅ — бонус уже начислен.",
         "",
         f"👤 L1: <b>{stats.get(1, 0)}</b> (активных {activated_l1}) · L2: <b>{stats.get(2, 0)}</b>",
-        f"💎 Заработано: <b>{earned} {STAR}</b>",
+        f"💎 Заработано с рефералов: <b>{earned} {STAR}</b>",
     ]
     if rank:
         lines.append(f"🏆 Место в топе рефереров: #{rank}")
-    lines += ["", "🔗 Ссылка:", f"<code>{h(link)}</code>"]
+    lines += ["", "🔗 Твоя ссылка:", f"<code>{h(link)}</code>"]
     if recent:
         lines += ["", "Недавние рефералы:"]
         for ref in recent:
@@ -470,6 +521,7 @@ def banned_short() -> str:
 def help_text(settings: Settings, is_admin: bool) -> str:
     support = f"\n\n📨 Поддержка: {h(settings.support_contact)}" if settings.support_contact else ""
     admin = "\n\n/admin — панель администратора" if is_admin else ""
+    ref_rules = "\n".join(f"  {line}" for line in referral_activation_rules(settings))
     return (
         "❓ <b>Как это работает</b>\n\n"
         f"• <b>Ежедневка</b> — каждый день забирай {settings.daily_base_reward}+ {STAR}, "
@@ -477,6 +529,8 @@ def help_text(settings: Settings, is_admin: bool) -> str:
         "• <b>Задания</b> — подписки, приглашения, серии. Награда × уровень × буст.\n"
         f"• <b>Рефералы</b> — {settings.referral_l1_bonus} {STAR} за активного друга и "
         f"{settings.referral_l1_percent}% с его заработка (плюс 2-й уровень).\n"
+        "  Когда друг «активируется» (подробнее в меню «Рефералы»):\n"
+        f"{ref_rules}\n"
         "• <b>Уровни</b> — XP за любые действия, множитель до ×2.\n"
         "• <b>Бусты</b> — множители и паки за Telegram Stars (XTR).\n"
         f"• <b>Вывод</b> — от {settings.withdraw_min} {STAR}, выбор готового подарка Telegram.\n\n"
@@ -529,7 +583,11 @@ def maintenance(settings: Settings) -> str:
 
 
 def notify_referral_joined(name: str) -> str:
-    return f"👥 По твоей ссылке пришёл новый друг: <b>{h(name)}</b>. Бонус будет после активации."
+    return (
+        f"👥 По твоей ссылке пришёл новый друг: <b>{h(name)}</b>.\n"
+        "Бонус начислим, когда он активируется "
+        "(активность в боте + обязательные подписки — см. «Рефералы»)."
+    )
 
 
 def notify_referral_activated(name: str, level: int, amount: int) -> str:
