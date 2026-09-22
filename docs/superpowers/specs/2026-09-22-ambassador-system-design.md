@@ -28,7 +28,7 @@
 | `reviewed_by`, `reviewed_at`, `reject_reason` | Аудит решения |
 | timestamps | `created_at`, `updated_at` |
 
-Индексы: `(user_id, status)`, уникальность активной заявки на ту же площадку — `(user_id, invite_link)` среди `pending`/`approved` (или нормализованный link + `chat_id` когда известен).
+Индексы: `(user_id, status)`; уникальность: не более одного `pending`/`approved` слота на пару `(user_id, invite_link)` (нормализованная ссылка в нижнем регистре без хвостового `/`).
 
 Миграция: **`0008_ambassador_slots`**.
 
