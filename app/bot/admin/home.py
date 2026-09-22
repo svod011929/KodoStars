@@ -20,7 +20,7 @@ router = Router(name="admin.home")
 async def _home_view(session: AsyncSession, settings: Settings) -> tuple[str, object]:
     pending = await withdrawals.count_queue(session)
     running = await running_broadcast(session) is not None
-    return texts.home(__version__, pending, running, settings.maintenance_mode), kb.home()
+    return texts.home(__version__, pending, running, settings.maintenance_mode), kb.home(pending)
 
 
 @router.message(Command("admin"))
@@ -38,6 +38,20 @@ async def admin_home(
     text, markup = await _home_view(session, settings)
     await safe_answer(call)
     await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data == "admin:catalog")
+async def admin_catalog(call: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await safe_answer(call)
+    await safe_edit(call.message, texts.catalog_hub(), kb.catalog_hub())
+
+
+@router.callback_query(F.data == "admin:system")
+async def admin_system(call: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await safe_answer(call)
+    await safe_edit(call.message, texts.system_hub(), kb.system_hub())
 
 
 @router.callback_query(F.data == "noop")

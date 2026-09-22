@@ -30,14 +30,15 @@ def device_gate_keyboard(url: str) -> InlineKeyboardMarkup:
 
 
 def main_menu(is_admin: bool = False, device_url: str | None = None) -> InlineKeyboardMarkup:
+    """Compact user menu: earn · social · money · help."""
     rows = []
     if device_url:
         rows.append([device_button(device_url)])
     rows += [
-        [button("Профиль", "menu:profile", icon="profile"), button("Рефералы", "menu:refs", icon="people")],
         [button("Ежедневка", "menu:daily", icon="gift"), button("Задания", "menu:tasks", icon="tasks")],
-        [button("Бусты", "menu:boosts", icon="boost"), button("Топ", "menu:top:refs", icon="top")],
-        [button("Вывод", "menu:withdraw", icon="withdraw"), button("Промокод", "menu:promo", icon="promo")],
+        [button("Профиль", "menu:profile", icon="profile"), button("Рефералы", "menu:refs", icon="people")],
+        [button("Вывод", "menu:withdraw", icon="withdraw"), button("Бусты", "menu:boosts", icon="boost")],
+        [button("Топ", "menu:top:refs", icon="top"), button("Промокод", "menu:promo", icon="promo")],
         [button("Помощь", "menu:help", icon="help")],
     ]
     if is_admin:

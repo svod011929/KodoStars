@@ -29,16 +29,32 @@ def _back(target: str = "admin:home"):
     return button("Назад", target, icon="back")
 
 
-def home() -> InlineKeyboardMarkup:
+def home(pending: int = 0) -> InlineKeyboardMarkup:
+    """Compact admin root: operations · products · traffic · system hubs."""
+    wd_label = f"Выводы ({pending})" if pending else "Выводы"
     return markup(
         [button("Статистика", "admin:stats", icon="stats"), button("Пользователи", "admin:users", icon="users")],
-        [button("Выводы", "admin:wd", icon="withdraw"), button("Рассылка", "admin:bc", icon="broadcast")],
-        [button("Задания", "admin:tasks", icon="tasks"), button("Бусты", "admin:boosts", icon="boost")],
-        [button("Промокоды", "admin:promo:list:0", icon="promo"), button("Платежи", "admin:pay:0", icon="payments")],
-        [button("Настройки", "admin:set", icon="settings"), button("PiarFlow", "admin:prov", icon="lock")],
-        [button("Админы", "admin:adm", icon="shield"), button("Журнал", "admin:audit:0", icon="audit")],
-        [button("Антифрод", "admin:fraud:0", icon="fraud"), button("Данные", "admin:data", icon="data")],
+        [button(wd_label, "admin:wd", icon="withdraw"), button("Рассылка", "admin:bc", icon="broadcast")],
+        [button("Каталог", "admin:catalog", icon="box"), button("PiarFlow", "admin:prov", icon="lock")],
+        [button("Настройки", "admin:set", icon="settings"), button("Система", "admin:system", icon="admin")],
         [button("В меню", "menu:home", icon="home")],
+    )
+
+
+def catalog_hub() -> InlineKeyboardMarkup:
+    return markup(
+        [button("Задания", "admin:tasks", icon="tasks"), button("Бусты", "admin:boosts", icon="boost")],
+        [button("Промокоды", "admin:promo:list:0", icon="promo")],
+        [_back()],
+    )
+
+
+def system_hub() -> InlineKeyboardMarkup:
+    return markup(
+        [button("Платежи", "admin:pay:0", icon="payments"), button("Админы", "admin:adm", icon="shield")],
+        [button("Журнал", "admin:audit:0", icon="audit"), button("Антифрод", "admin:fraud:0", icon="fraud")],
+        [button("Данные", "admin:data", icon="data")],
+        [_back()],
     )
 
 
@@ -48,7 +64,7 @@ def back_home(*rows: list) -> InlineKeyboardMarkup:
 
 def stats() -> InlineKeyboardMarkup:
     return markup(
-        [button("Обновить", "admin:stats", icon="refresh"), button("Сверка балансов", "admin:reconcile", icon="code")],
+        [button("Обновить", "admin:stats", icon="refresh"), button("Сверка", "admin:reconcile", icon="code")],
         [button("PiarFlow трафик", "admin:pf:stats", icon="megaphone")],
         [_back()],
     )
@@ -129,7 +145,7 @@ def cancel_to(target: str) -> InlineKeyboardMarkup:
 
 def fraud(page: int, total: int, user_id: int | None) -> InlineKeyboardMarkup:
     prefix = f"admin:u:{user_id}:fraud" if user_id else "admin:fraud"
-    back = button("Карточка", f"admin:u:{user_id}", icon="profile") if user_id else _back()
+    back = button("Карточка", f"admin:u:{user_id}", icon="profile") if user_id else _back("admin:system")
     return markup(
         pager(prefix, page, total, PAGE_SIZE),
         [
@@ -151,7 +167,7 @@ def suspicious(rows: Sequence[tuple[User, int, int]]) -> InlineKeyboardMarkup:
             button("Твинки", "admin:twinks", icon="twins"),
         ]
     )
-    buttons.append([_back()])
+    buttons.append([_back("admin:system")])
     return markup(*buttons)
 
 
@@ -163,7 +179,7 @@ def twinks(clusters: Sequence[tuple[str, int, Sequence[User]]]) -> InlineKeyboar
             rows.append(
                 [button(f"{first.display_name[:18]} +{count - 1}", f"admin:u:{first.id}", icon="twins")]
             )
-    rows.append([button("События", "admin:fraud:0", icon="fraud"), _back()])
+    rows.append([button("События", "admin:fraud:0", icon="fraud"), _back("admin:system")])
     return markup(*rows)
 
 
@@ -327,7 +343,7 @@ def tasks_home(tasks: Sequence[Task]) -> InlineKeyboardMarkup:
         ]
         for t in tasks[:12]
     ]
-    rows.append([button("Новое задание", "admin:task:new", icon="plus"), _back()])
+    rows.append([button("Новое задание", "admin:task:new", icon="plus"), _back("admin:catalog")])
     return markup(*rows)
 
 
@@ -371,7 +387,7 @@ def boosts_home(products: Sequence[BoostProduct]) -> InlineKeyboardMarkup:
         ]
         for p in products[:12]
     ]
-    rows.append([button("Новый буст", "admin:boost:new", icon="plus"), _back()])
+    rows.append([button("Новый буст", "admin:boost:new", icon="plus"), _back("admin:catalog")])
     return markup(*rows)
 
 
@@ -420,7 +436,7 @@ def promo_home(items: Sequence[PromoCode], page: int, total: int) -> InlineKeybo
         for p in items
     ]
     rows.append(pager("admin:promo:list", page, total, PAGE_SIZE))
-    rows.append([button("Новый промокод", "admin:promo:new", icon="plus"), _back()])
+    rows.append([button("Новый промокод", "admin:promo:new", icon="plus"), _back("admin:catalog")])
     return markup(*rows)
 
 
@@ -451,7 +467,7 @@ def payments_home(items: Sequence[Payment], page: int, total: int) -> InlineKeyb
         for p in items
     ]
     rows.append(pager("admin:pay", page, total, PAGE_SIZE))
-    rows.append([_back()])
+    rows.append([_back("admin:system")])
     return markup(*rows)
 
 
@@ -548,7 +564,7 @@ def admins(rows_db: Sequence[Admin], can_manage: bool) -> InlineKeyboardMarkup:
             [[button(f"Удалить {row.user_id}", f"admin:adm:del:{row.user_id}", icon="trash")] for row in rows_db]
         )
         rows.append([button("Добавить админа", "admin:adm:add", icon="plus")])
-    rows.append([_back()])
+    rows.append([_back("admin:system")])
     return markup(*rows)
 
 
@@ -556,7 +572,7 @@ def admins(rows_db: Sequence[Admin], can_manage: bool) -> InlineKeyboardMarkup:
 
 
 def audit(page: int, total: int) -> InlineKeyboardMarkup:
-    return markup(pager("admin:audit", page, total, PAGE_SIZE), [_back()])
+    return markup(pager("admin:audit", page, total, PAGE_SIZE), [_back("admin:system")])
 
 
 def data_home() -> InlineKeyboardMarkup:
@@ -570,5 +586,5 @@ def data_home() -> InlineKeyboardMarkup:
             button("Платежи CSV", "admin:exp:pay", icon="download"),
         ],
         [button("Импорт пользователей", "admin:import", icon="upload")],
-        [_back()],
+        [_back("admin:system")],
     )

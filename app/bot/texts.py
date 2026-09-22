@@ -63,14 +63,12 @@ def home(
         boost_line += f" · буст {boost}" + (f" до {boost_until}" if boost_until else "")
     notice = f"\n\n{device_notice}" if device_notice else ""
     return (
-        f"{STAR} <b>KodoStars</b>\n\n"
+        f"{STAR} <b>KodoStars</b>\n"
         f"Привет, {h(user.first_name or 'друг')}!\n\n"
-        f"💰 Баланс: <b>{balance} {STAR}</b>{hold}\n"
+        f"Баланс: <b>{balance} {STAR}</b>{hold}\n"
         f"{level_line}\n"
-        f"{boost_line}\n"
-        f"🔥 Серия ежедневок: {user.streak} дн.\n\n"
-        f"🔗 Твоя реферальная ссылка:\n<code>{h(link)}</code>\n\n"
-        "Зови друзей, забирай ежедневку, выполняй задания — и выводи Stars."
+        f"{boost_line} · серия {user.streak} дн.\n\n"
+        f"Реф. ссылка:\n<code>{h(link)}</code>"
         f"{notice}"
     )
 

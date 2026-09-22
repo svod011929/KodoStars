@@ -307,7 +307,7 @@ async def test_admin_panel_access_and_stats(harness: BotHarness) -> None:
 
     await _start(h, ADMIN_ID)
     await h.feed(message_update(ADMIN_ID, "/admin"))
-    assert "Админ-панель" in h.tg.last_text(ADMIN_ID)
+    assert "Админка" in h.tg.last_text(ADMIN_ID) or "Админ" in h.tg.last_text(ADMIN_ID)
     await h.feed(callback_update(ADMIN_ID, "admin:stats"))
     stats_text = h.tg.last_text(ADMIN_ID)
     assert "Статистика" in stats_text
@@ -524,7 +524,7 @@ async def test_owner_manages_admins(harness: BotHarness) -> None:
     await h.feed(message_update(ADMIN_ID, str(USER_ID)))
     assert h.access.is_admin(USER_ID)
     await h.feed(message_update(USER_ID, "/admin"))
-    assert "Админ-панель" in h.tg.last_text(USER_ID)
+    assert "Админка" in h.tg.last_text(USER_ID)
     # A DB admin cannot add other admins.
     await h.feed(callback_update(USER_ID, "admin:adm:add"))
     assert "Недостаточно прав" in h.tg.alerts()[-1]

@@ -50,15 +50,31 @@ STAR = _CurrencyGlyph()
 def home(version: str, pending: int, running_broadcast: bool, maintenance: bool) -> str:
     flags = []
     if maintenance:
-        flags.append("🛠 режим обслуживания ВКЛ")
+        flags.append("обслуживание")
     if running_broadcast:
-        flags.append("📣 идёт рассылка")
-    status = ("\n".join(flags) + "\n\n") if flags else ""
+        flags.append("рассылка")
+    status = f" · {' · '.join(flags)}" if flags else ""
+    queue = f" · очередь выводов: <b>{pending}</b>" if pending else ""
     return (
-        f"🛠 <b>Админ-панель KodoStars</b> <i>v{h(version)}</i>\n\n"
-        f"{status}"
-        f"Заявок на вывод в очереди: <b>{pending}</b>\n\n"
-        "Выберите раздел."
+        f"🛠 <b>Админка</b> <i>v{h(version)}</i>{status}{queue}\n\n"
+        "<b>Операции</b> — статистика, пользователи, выводы, рассылка\n"
+        "<b>Каталог</b> — задания, бусты, промокоды\n"
+        "<b>PiarFlow</b> — ОП и трафик\n"
+        "<b>Система</b> — платежи, админы, журнал, антифрод, данные"
+    )
+
+
+def catalog_hub() -> str:
+    return (
+        "📦 <b>Каталог</b>\n\n"
+        "Задания, бусты и промокоды — то, что видит пользователь в боте."
+    )
+
+
+def system_hub() -> str:
+    return (
+        "⚙️ <b>Система</b>\n\n"
+        "Платежи XTR, админы, журнал действий, антифрод и экспорт данных."
     )
 
 
