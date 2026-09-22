@@ -785,9 +785,9 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
     kind = RUNTIME_OVERRIDABLE[key]
     hint = "вкл / выкл" if kind is bool else "целое число" if kind is int else "текст"
     if key == "currency_emoji_id":
-        hint = "numeric id или <tg-emoji emoji-id=\"…\">…</tg-emoji>"
+        hint = "вставьте премиум-эмодзи из Telegram (или numeric id / <tg-emoji>…)"
     elif key == "currency_emoji_fallback":
-        hint = "один unicode-символ, например ⭐"
+        hint = "вставьте премиум-эмодзи или unicode (например ⭐); id подтянется из entity"
     return (
         f"⚙️ <b>{h(RUNTIME_SETTING_LABELS.get(key, key))}</b>\n"
         f"Ключ: <code>{key}</code>\n\n"

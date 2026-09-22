@@ -82,3 +82,63 @@ def test_settings_currency_defaults() -> None:
     s = Settings(admin_ids_raw="1", database_url="sqlite+aiosqlite://")
     assert s.currency_emoji_id == pe.DEFAULT_CURRENCY_ID
     assert s.currency_emoji_fallback == "⭐"
+
+
+def test_extract_currency_from_custom_emoji_message() -> None:
+    from aiogram.enums import MessageEntityType
+    from aiogram.types import Chat, Message, MessageEntity, User
+    from app.services.app_settings import extract_currency_from_message
+
+    msg = Message(
+        message_id=1,
+        date=0,
+        chat=Chat(id=1, type="private"),
+        from_user=User(id=1, is_bot=False, first_name="A"),
+        text="🪙",
+        entities=[
+            MessageEntity(
+                type=MessageEntityType.CUSTOM_EMOJI,
+                offset=0,
+                length=1,
+                custom_emoji_id="6032644646587338669",
+            )
+        ],
+    )
+    emoji_id, fallback = extract_currency_from_message(msg)
+    assert emoji_id == "6032644646587338669"
+    assert fallback == "🪙"
+
+
+def test_extract_currency_from_plain_text_id() -> None:
+    from aiogram.types import Chat, Message, User
+    from app.services.app_settings import extract_currency_from_message
+
+    msg = Message(
+        message_id=1,
+        date=0,
+        chat=Chat(id=1, type="private"),
+        from_user=User(id=1, is_bot=False, first_name="A"),
+        text="6032644646587338669",
+    )
+    emoji_id, fallback = extract_currency_from_message(msg)
+    assert emoji_id == "6032644646587338669"
+    assert fallback is None
+
+
+@pytest.mark.asyncio
+async def test_set_currency_pair_updates_id_and_fallback(session, settings) -> None:
+    from app.services.app_settings import RuntimeSettingsStore
+
+    store = RuntimeSettingsStore(settings)
+    saved = await store.set_currency_pair(
+        session,
+        admin_id=1,
+        emoji_id="6032644646587338669",
+        fallback="🎁",
+    )
+    assert saved["currency_emoji_id"] == "6032644646587338669"
+    assert saved["currency_emoji_fallback"] == "🎁"
+    effective = await store.effective(session)
+    assert effective.currency_emoji_id == "6032644646587338669"
+    assert pe.currency_id() == "6032644646587338669"
+    assert pe.currency_fallback() == "🎁"

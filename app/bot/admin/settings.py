@@ -13,7 +13,7 @@ from app.bot.utils import safe_answer, safe_edit
 from app.config import RUNTIME_OVERRIDABLE, Settings
 from app.op.gate import CASCADE, enabled_providers, provider_configured, toggle_provider
 from app.services import audit
-from app.services.app_settings import RuntimeSettingsStore
+from app.services.app_settings import RuntimeSettingsStore, extract_currency_from_message
 from app.services.errors import EconomyError
 
 router = Router(name="admin.settings")
@@ -113,7 +113,36 @@ async def setting_set(
         await message.answer("Настройка не выбрана.")
         return
     try:
-        await _apply_setting(session, settings_store, key, message.text or "", message.from_user.id)
+        if key in {"currency_emoji_id", "currency_emoji_fallback"}:
+            emoji_id, fallback = extract_currency_from_message(message)
+            # Pasting a premium emoji must update BOTH id and fallback — otherwise
+            # Telegram keeps rendering the old custom glyph from the unchanged id.
+            if emoji_id:
+                saved = await settings_store.set_currency_pair(
+                    session,
+                    admin_id=message.from_user.id,
+                    emoji_id=emoji_id,
+                    fallback=fallback,
+                )
+                for saved_key, value in saved.items():
+                    await audit.log_action(
+                        session,
+                        admin_id=message.from_user.id,
+                        action="settings.set",
+                        target_type="setting",
+                        target_id=saved_key,
+                        value=value,
+                    )
+            elif key == "currency_emoji_fallback" and fallback:
+                await _apply_setting(
+                    session, settings_store, key, fallback, message.from_user.id
+                )
+            else:
+                raise EconomyError(
+                    "Вставьте премиум-эмодзи из Telegram или numeric emoji-id"
+                )
+        else:
+            await _apply_setting(session, settings_store, key, message.text or "", message.from_user.id)
     except EconomyError as exc:
         await message.answer(f"⚠️ {exc.message}")
         return
