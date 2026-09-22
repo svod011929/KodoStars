@@ -250,7 +250,7 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 ## Миграции
 
 Схема управляется Alembic (`app/migrations`). При старте бот сам приводит БД к актуальной ревизии
-(сейчас head — `0006_piarflow_paid_subs`):
+(сейчас head — `0007_piarflow_issued_subs`):
 
 - пустая БД → создаётся с нуля;
 - БД от версии 0.1 (`create_all`, без `alembic_version`) → штампуется `0001_baseline` и обновляется;
@@ -306,7 +306,7 @@ app/
   op/                    # OpGate + адаптер piarflow
   web/                   # Mini App + /api/device + /api/piarflow/webhook
   db/                    # models, session, seed, migrate
-  migrations/            # Alembic env + versions (…0006_piarflow_paid_subs)
+  migrations/            # Alembic env + versions (…0007_piarflow_issued_subs)
 tests/
 docs/superpowers/specs/
 ```
