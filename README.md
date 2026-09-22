@@ -221,6 +221,9 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 | Ошибка API | fail-open |
 
 Админ может выключить PiarFlow в рантайме (таблица `provider_states`).
+В **Админка → PiarFlow** и **Статистика → PiarFlow трафик** — выданные спонсоры,
+засчитанные (`subscribed`) и конверсия; списки с пагинацией.
+Учёт: `piarflow_issued_subs` (выдача) и `piarflow_paid_subs` (зачёт).
 
 ### Вебхук отписок
 
@@ -254,7 +257,8 @@ TGrass / Trafsly / manual-каналы ОП удалены.
 - иначе — обычный `upgrade head`.
 
 Ключевые ревизии после 1.1.0: `0005_piarflow_fragment` (вебхук отписок),
-`0006_piarflow_paid_subs` (учёт оплаченных подписок для рефералки).
+`0006_piarflow_paid_subs` (учёт оплаченных подписок для рефералки),
+`0007_piarflow_issued_subs` (учёт выданных спонсоров для статистики).
 
 ```bash
 alembic current
