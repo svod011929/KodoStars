@@ -55,10 +55,19 @@ def test_home_and_share_use_live_bot_name() -> None:
     home = texts.home(user, balance=0, held=0, level=level, boost_bp=100, boost_until=None, link="https://t.me/x")
     assert "AcmeStars" in home
     assert "KodoStars" not in home
+    hooked_home = texts.home(
+        user, balance=0, held=0, level=level, boost_bp=100, boost_until=None, link="https://t.me/x", l1_bonus=10
+    )
+    assert "за каждого друга" in hooked_home
 
     share = texts.share_text("https://t.me/x", signup_bonus=0)
     assert "AcmeStars" in share
     assert "KodoStars" not in share
+
+    hooked = texts.share_text("https://t.me/x", signup_bonus=0, l1_bonus=10)
+    assert "AcmeStars" in hooked
+    assert "10" in hooked
+    assert "KodoStars" not in hooked
 
 
 def test_premiumize_expands_bot_placeholder() -> None:

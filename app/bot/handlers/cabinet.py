@@ -83,7 +83,10 @@ async def menu_refs(
     await safe_edit(
         call.message,
         texts.referrals(db_user, link, stats, activated, earned, rank, settings, recent),
-        keyboards.referrals_menu(link, texts.share_text(link, settings.signup_bonus)),
+        keyboards.referrals_menu(
+            link,
+            texts.share_text(link, settings.signup_bonus, settings.referral_l1_bonus),
+        ),
     )
 
 
