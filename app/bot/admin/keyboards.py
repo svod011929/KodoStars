@@ -7,7 +7,14 @@ from collections.abc import Sequence
 from aiogram.types import InlineKeyboardMarkup
 
 from app.bot.utils import PAGE_SIZE, button, markup, pager
-from app.config import RUNTIME_OVERRIDABLE, RUNTIME_SETTING_LABELS
+from app.config import (
+    RUNTIME_OVERRIDABLE,
+    RUNTIME_SETTING_LABELS,
+    SETTINGS_GROUP_ICONS,
+    SETTINGS_GROUP_LABELS,
+    SETTINGS_GROUPS,
+    setting_group,
+)
 from app.db.models import (
     AMBASSADOR_KIND_LABELS,
     AMBASSADOR_STATUS_LABELS,
@@ -501,16 +508,36 @@ def refund_confirm(payment_id: int) -> InlineKeyboardMarkup:
 
 
 def settings_home() -> InlineKeyboardMarkup:
-    rows = []
-    row = []
-    for key in RUNTIME_OVERRIDABLE:
-        row.append(button(RUNTIME_SETTING_LABELS.get(key, key)[:30], f"admin:set:{key}", icon="settings"))
+    """Root hub: groups only (not every runtime key)."""
+    rows: list[list] = []
+    row: list = []
+    for group_id, label in SETTINGS_GROUP_LABELS.items():
+        icon = SETTINGS_GROUP_ICONS.get(group_id, "settings")
+        row.append(button(label, f"admin:set:g:{group_id}", icon=icon))
         if len(row) == 2:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
     rows.append([_back()])
+    return markup(*rows)
+
+
+def settings_group(group_id: str) -> InlineKeyboardMarkup:
+    keys = SETTINGS_GROUPS.get(group_id, ())
+    rows: list[list] = []
+    row: list = []
+    for key in keys:
+        if key not in RUNTIME_OVERRIDABLE:
+            continue
+        label = RUNTIME_SETTING_LABELS.get(key, key)[:28]
+        row.append(button(label, f"admin:set:{key}", icon="settings"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([button("Все настройки", "admin:set", icon="settings")])
     return markup(*rows)
 
 
@@ -525,7 +552,12 @@ def setting_edit(key: str, overridden: bool, is_bool: bool) -> InlineKeyboardMar
         )
     if overridden:
         rows.append([button("Сбросить к .env", f"admin:set:{key}:reset", icon="undo")])
-    rows.append([button("Настройки", "admin:set", icon="settings")])
+    group = setting_group(key)
+    if group:
+        back_label = SETTINGS_GROUP_LABELS.get(group, "Настройки")
+        rows.append([button(back_label, f"admin:set:g:{group}", icon="back")])
+    else:
+        rows.append([button("Настройки", "admin:set", icon="settings")])
     return markup(*rows)
 
 

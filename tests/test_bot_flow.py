@@ -353,6 +353,10 @@ async def test_runtime_settings_and_maintenance(harness: BotHarness) -> None:
     h = harness
     await _start(h, ADMIN_ID)
     await _start(h, USER_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:set"))
+    assert "Выберите раздел" in h.tg.last_text(ADMIN_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:set:g:withdraw"))
+    assert "Вывод" in h.tg.last_text(ADMIN_ID)
     await h.feed(callback_update(ADMIN_ID, "admin:set:withdraw_min"))
     assert "withdraw_min" in h.tg.last_text(ADMIN_ID)
     await h.feed(message_update(ADMIN_ID, "abc"))

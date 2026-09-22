@@ -7,7 +7,13 @@ from typing import Any
 
 from app.bot import emoji as pe
 from app.bot.utils import fmt_ago, fmt_dt, fmt_signed, h, mention
-from app.config import RUNTIME_OVERRIDABLE, RUNTIME_SETTING_LABELS, Settings
+from app.config import (
+    RUNTIME_OVERRIDABLE,
+    RUNTIME_SETTING_LABELS,
+    SETTINGS_GROUP_LABELS,
+    SETTINGS_GROUPS,
+    Settings,
+)
 from app.db.models import (
     AMBASSADOR_KIND_LABELS,
     AMBASSADOR_STATUS_LABELS,
@@ -766,13 +772,28 @@ def refund_confirm(payment: Payment, title: str) -> str:
 
 
 def settings_home(effective: Settings, overrides: dict[str, Any]) -> str:
+    overridden = sum(1 for key in RUNTIME_OVERRIDABLE if key in overrides)
     lines = [
         "⚙️ <b>Настройки</b>",
         "",
-        "Значения применяются мгновенно без перезапуска. ✏️ — переопределено в БД.",
+        "Выберите раздел. Значения применяются сразу, без перезапуска.",
+        f"Переопределено в БД: <b>{overridden}</b> из {len(RUNTIME_OVERRIDABLE)}.",
+    ]
+    return "\n".join(lines)
+
+
+def settings_group(group_id: str, effective: Settings, overrides: dict[str, Any]) -> str:
+    title = SETTINGS_GROUP_LABELS.get(group_id, group_id)
+    keys = SETTINGS_GROUPS.get(group_id, ())
+    lines = [
+        f"⚙️ <b>{h(title)}</b>",
+        "",
+        "✏️ — переопределено в БД (не из .env).",
         "",
     ]
-    for key in RUNTIME_OVERRIDABLE:
+    for key in keys:
+        if key not in RUNTIME_OVERRIDABLE:
+            continue
         mark = "✏️ " if key in overrides else ""
         lines.append(
             f"{mark}<b>{h(RUNTIME_SETTING_LABELS.get(key, key))}</b>: "

@@ -91,6 +91,86 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "botohub_views_api_url": "BotoHub Views: URL SendPost",
 }
 
+# Compact admin settings hubs — every RUNTIME_OVERRIDABLE key must appear once.
+SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
+    "refs": (
+        "referral_l1_percent",
+        "referral_l2_percent",
+        "referral_l1_bonus",
+        "referral_l2_bonus",
+        "min_referral_activity",
+        "referral_min_piarflow_subs",
+        "notify_referrer",
+    ),
+    "rewards": (
+        "daily_base_reward",
+        "daily_streak_bonus",
+        "daily_streak_cap",
+        "signup_bonus",
+        "claim_cooldown_seconds",
+        "currency_emoji_id",
+        "currency_emoji_fallback",
+    ),
+    "withdraw": (
+        "withdraw_enabled",
+        "withdraw_min",
+        "withdraw_max",
+        "withdraw_cooldown_hours",
+        "withdraw_min_referrals",
+    ),
+    "antifraud": (
+        "device_check_enabled",
+        "device_check_for_withdraw",
+        "device_check_for_op",
+        "twink_block_referral",
+        "twink_block_withdraw",
+        "twink_block_op",
+        "twink_require_ip_match",
+        "twink_ip_window_days",
+    ),
+    "traffic": (
+        "op_cache_sec",
+        "piarflow_unsub_penalty",
+        "botohub_views_enabled",
+        "botohub_views_token",
+        "botohub_views_cooldown_seconds",
+        "botohub_views_api_url",
+    ),
+    "system": (
+        "support_contact",
+        "maintenance_mode",
+        "maintenance_text",
+        "broadcast_rate_per_sec",
+    ),
+}
+
+SETTINGS_GROUP_LABELS: dict[str, str] = {
+    "refs": "Рефералы",
+    "rewards": "Награды",
+    "withdraw": "Вывод",
+    "antifraud": "Антитвинк",
+    "traffic": "Трафик",
+    "system": "Система",
+}
+
+SETTINGS_GROUP_ICONS: dict[str, str] = {
+    "refs": "people",
+    "rewards": "gift",
+    "withdraw": "withdraw",
+    "antifraud": "fraud",
+    "traffic": "lock",
+    "system": "admin",
+}
+
+_SETTING_TO_GROUP: dict[str, str] = {
+    key: group for group, keys in SETTINGS_GROUPS.items() for key in keys
+}
+
+
+def setting_group(key: str) -> str | None:
+    """Return settings hub id for a runtime key, if grouped."""
+    return _SETTING_TO_GROUP.get(key)
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
