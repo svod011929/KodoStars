@@ -52,5 +52,8 @@ async def render_home(
         boost_until,
         referral_link(bot_username, user.id),
         device_notice=notice,
+        l1_bonus=settings.referral_l1_bonus,
     )
-    return text, keyboards.main_menu(is_admin, device_url=device_url)
+    return text, keyboards.main_menu(
+        is_admin, device_url=device_url, l1_bonus=settings.referral_l1_bonus
+    )

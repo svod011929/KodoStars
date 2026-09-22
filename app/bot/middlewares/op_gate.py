@@ -66,7 +66,7 @@ class OpGateMiddleware(BaseMiddleware):
         result = await self._gate.enforce(ctx, session, settings=settings, user=user)
         await piarflow_quality.record_from_op_result(session, user.id, result)
         if not result.allowed:
-            await _reply_blocked(inner, result)
+            await _reply_blocked(inner, result, l1_bonus=settings.referral_l1_bonus)
             return None
 
         user.last_op_ok_at = datetime.now(UTC)
@@ -105,10 +105,14 @@ def _chat_id(event: TelegramObject, fallback: int) -> int:
     return fallback
 
 
-async def _reply_blocked(event: TelegramObject, result: OpResult) -> None:
+async def _reply_blocked(event: TelegramObject, result: OpResult, *, l1_bonus: int = 0) -> None:
     inner = unwrap_event(event)
     markup = keyboards.op_keyboard(result.sponsors)
-    await _reply(inner, texts.op_blocked(result.provider, result.message), markup)
+    await _reply(
+        inner,
+        texts.op_blocked(result.provider, result.message, l1_bonus=l1_bonus),
+        markup,
+    )
     if isinstance(inner, CallbackQuery):
         await inner.answer()
 

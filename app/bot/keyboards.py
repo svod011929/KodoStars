@@ -39,14 +39,19 @@ def device_gate_keyboard(url: str) -> InlineKeyboardMarkup:
     return markup([device_button(url)])
 
 
-def main_menu(is_admin: bool = False, device_url: str | None = None) -> InlineKeyboardMarkup:
+def main_menu(
+    is_admin: bool = False,
+    device_url: str | None = None,
+    l1_bonus: int = 0,
+) -> InlineKeyboardMarkup:
     """Compact user menu: earn · social · money · help."""
     rows = []
     if device_url:
         rows.append([device_button(device_url)])
+    ref_label = f"{l1_bonus} за друга" if l1_bonus > 0 else "Рефералы"
     rows += [
-        [button("Ежедневка", "menu:daily", icon="gift"), button("Задания", "menu:tasks", icon="tasks")],
-        [button("Профиль", "menu:profile", icon="profile"), button("Рефералы", "menu:refs", icon="people")],
+        [button(ref_label, "menu:refs", icon="people"), button("Ежедневка", "menu:daily", icon="gift")],
+        [button("Задания", "menu:tasks", icon="tasks"), button("Профиль", "menu:profile", icon="profile")],
         [button("Вывод", "menu:withdraw", icon="withdraw"), button("Бусты", "menu:boosts", icon="boost")],
         [button("Топ", "menu:top:refs", icon="top"), button("Промокод", "menu:promo", icon="promo")],
         [button("Амбассадор", "menu:amb", icon="handshake"), button("Помощь", "menu:help", icon="help")],

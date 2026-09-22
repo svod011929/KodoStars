@@ -52,7 +52,9 @@ async def _gate_op(
         return "ok", None, None, result
     return (
         "op",
-        texts.op_blocked(result.provider, result.message),
+        texts.op_blocked(
+            result.provider, result.message, l1_bonus=settings.referral_l1_bonus
+        ),
         keyboards.op_keyboard(result.sponsors),
         result,
     )

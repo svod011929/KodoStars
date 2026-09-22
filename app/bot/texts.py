@@ -66,6 +66,7 @@ def home(
     boost_until: str | None,
     link: str,
     device_notice: str = "",
+    l1_bonus: int = 0,
 ) -> str:
     if level.next_xp is not None:
         level_line = (
@@ -79,13 +80,21 @@ def home(
     if boost_bp > 100:
         boost_line += f" · буст {boost}" + (f" до {boost_until}" if boost_until else "")
     notice = f"\n\n{device_notice}" if device_notice else ""
+    if l1_bonus > 0:
+        hook = (
+            f"🔥 <b>{l1_bonus} {STAR} за каждого друга</b>\n"
+            "Жми кнопку ниже, кидай ссылку в чаты. "
+            "Друг заходит и делает пару действий — звёзды падают тебе.\n\n"
+        )
+    else:
+        hook = ""
     return (
         f"{STAR} <b>{BOT}</b>\n"
-        f"Привет, {h(user.first_name or 'друг')}!\n\n"
+        f"{hook}"
         f"Баланс: <b>{balance} {STAR}</b>{hold}\n"
         f"{level_line}\n"
         f"{boost_line} · серия {user.streak} дн.\n\n"
-        f"Реф. ссылка:\n<code>{h(link)}</code>"
+        f"Твоя ссылка:\n<code>{h(link)}</code>"
         f"{notice}"
     )
 
@@ -269,10 +278,11 @@ def referrals(
     recent: Sequence[User],
 ) -> str:
     lines = [
-        "👥 <b>Рефералы</b>",
+        f"🔥 <b>{settings.referral_l1_bonus} {STAR} за друга</b>",
+        "Одна ссылка. Друг заходит по ней и становится активным — бонус твой.",
         "",
-        "<b>Что ты получаешь</b>",
-        f"• За друга (L1): <b>{settings.referral_l1_bonus} {STAR}</b> после его активации + "
+        "<b>Что ещё капает</b>",
+        f"• За друга (L1): <b>{settings.referral_l1_bonus} {STAR}</b> после активации + "
         f"<b>{settings.referral_l1_percent}%</b> с его заработка.",
     ]
     if settings.referral_levels >= 2:
@@ -302,9 +312,14 @@ def referrals(
     return "\n".join(lines)
 
 
-def share_text(link: str, signup_bonus: int) -> str:
-    bonus = f" Бонус {signup_bonus} ⭐ за старт!" if signup_bonus else ""
-    return f"Зарабатывай Telegram Stars за друзей и ежедневки в {BOT}.{bonus} {link}"
+def share_text(link: str, signup_bonus: int, l1_bonus: int = 0) -> str:
+    """Text the friend sees in the Telegram share sheet."""
+    if l1_bonus > 0:
+        pitch = f"{BOT}: {l1_bonus} ⭐ за каждого друга, которого приведёшь."
+    else:
+        pitch = f"Зарабатывай Telegram Stars за друзей и ежедневки в {BOT}."
+    bonus = f" Ещё {signup_bonus} ⭐ за старт." if signup_bonus else ""
+    return f"{pitch}{bonus} {link}"
 
 
 def daily_screen(preview: DailyPreview, settings: Settings) -> str:
@@ -499,12 +514,17 @@ def promo_ok(promo: PromoCode, amount: int) -> str:
     return f"🎟 Промокод <code>{h(promo.code)}</code> активирован: <b>+{amount} {STAR}</b>!"
 
 
-def op_blocked(provider: str, extra: str = "") -> str:
+def op_blocked(provider: str, extra: str = "", l1_bonus: int = 0) -> str:
     tail = f"\n\n{h(extra)}" if extra else ""
+    hook = (
+        f"Дальше откроется бот: <b>{l1_bonus} {STAR}</b> за каждого друга.\n\n"
+        if l1_bonus > 0
+        else ""
+    )
     return (
-        "🔒 <b>Обязательная подписка</b>\n\n"
-        "Чтобы пользоваться ботом, подпишитесь на спонсоров ниже, "
-        "затем нажмите «Я подписался»."
+        "🔒 <b>Один шаг — и доступ открыт</b>\n\n"
+        f"{hook}"
+        "Подпишись на спонсоров ниже и нажми «Я подписался»."
         f"{tail}"
     )
 
