@@ -14,6 +14,7 @@ from app.bot.utils import PAGE_SIZE, parse_id, safe_answer, safe_edit
 from app.services import audit
 from app.services import promo as promo_service
 from app.services.errors import EconomyError
+from app.services.promo import activation_link
 
 router = Router(name="admin.promo")
 
@@ -22,6 +23,10 @@ async def _list_view(session: AsyncSession, page: int):
     total = await promo_service.count_promos(session)
     items = await promo_service.list_promos(session, limit=PAGE_SIZE, offset=page * PAGE_SIZE)
     return texts.promo_home(items, page, total, PAGE_SIZE), kb.promo_home(items, page, total)
+
+
+def _card(promo, bot_username: str):
+    return texts.promo_card(promo, bot_username=bot_username), kb.promo_card(promo)
 
 
 @router.callback_query(F.data.regexp(r"^admin:promo:list:(\d+)$"))
@@ -72,7 +77,9 @@ async def promo_new_limit(message: Message, state: FSMContext) -> None:
 
 
 @router.message(StateFilter(AdminFSM.promo_days), F.text)
-async def promo_new_days(message: Message, session: AsyncSession, state: FSMContext) -> None:
+async def promo_new_days(
+    message: Message, session: AsyncSession, state: FSMContext, bot_username: str
+) -> None:
     raw = (message.text or "").strip()
     if not raw.isdigit():
         await message.answer("Нужно целое число (0 — бессрочно).")
@@ -103,22 +110,51 @@ async def promo_new_days(message: Message, session: AsyncSession, state: FSMCont
         reward=promo.reward,
     )
     await state.clear()
-    await message.answer(texts.promo_card(promo), reply_markup=kb.promo_card(promo))
+    text, markup = _card(promo, bot_username)
+    await message.answer(text, reply_markup=markup)
 
 
 @router.callback_query(F.data.regexp(r"^admin:promo:(\d+)$"))
-async def promo_card(call: CallbackQuery, session: AsyncSession) -> None:
+async def promo_card(call: CallbackQuery, session: AsyncSession, bot_username: str) -> None:
     try:
         promo = await promo_service.get_promo(session, parse_id(call.data))
     except EconomyError as exc:
         await safe_answer(call, exc.message, alert=True)
         return
     await safe_answer(call)
-    await safe_edit(call.message, texts.promo_card(promo), kb.promo_card(promo))
+    text, markup = _card(promo, bot_username)
+    await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data.regexp(r"^admin:promo:(\d+):bc$"))
+async def promo_broadcast_start(
+    call: CallbackQuery, session: AsyncSession, state: FSMContext, bot_username: str
+) -> None:
+    """Start a broadcast with the promo activation URL pre-filled as the button."""
+    try:
+        promo = await promo_service.get_promo(session, parse_id(call.data, -2))
+    except EconomyError as exc:
+        await safe_answer(call, exc.message, alert=True)
+        return
+    link = activation_link(bot_username, promo.code)
+    await state.set_state(AdminFSM.bc_message)
+    await state.set_data(
+        {
+            "button_text": "Активировать",
+            "button_url": link,
+            "promo_id": promo.id,
+        }
+    )
+    await safe_answer(call)
+    await safe_edit(
+        call.message,
+        texts.promo_broadcast_prompt(promo, link),
+        kb.cancel_to(f"admin:promo:{promo.id}"),
+    )
 
 
 @router.callback_query(F.data.regexp(r"^admin:promo:(\d+):tg$"))
-async def promo_toggle(call: CallbackQuery, session: AsyncSession) -> None:
+async def promo_toggle(call: CallbackQuery, session: AsyncSession, bot_username: str) -> None:
     try:
         promo = await promo_service.toggle_promo(session, parse_id(call.data, -2))
     except EconomyError as exc:
@@ -133,7 +169,8 @@ async def promo_toggle(call: CallbackQuery, session: AsyncSession) -> None:
         active=promo.is_active,
     )
     await safe_answer(call, "Включён" if promo.is_active else "Выключен")
-    await safe_edit(call.message, texts.promo_card(promo), kb.promo_card(promo))
+    text, markup = _card(promo, bot_username)
+    await safe_edit(call.message, text, markup)
 
 
 @router.callback_query(F.data.regexp(r"^admin:promo:(\d+):del$"))

@@ -245,7 +245,7 @@ class Settings(BaseSettings):
     piarflow_unsub_penalty: int = 10
 
     # Tgrass — https://tgrass.space/integration (POST /offers, Auth header).
-    # Shown before device/twin checks (PRE_DEVICE_CASCADE).
+    # Shown after device/twin when verified; alone when not (see providers_for_user).
     tgrass_enabled: bool = True
     tgrass_api_key: str = ""
     tgrass_api_url: str = "https://tgrass.space"

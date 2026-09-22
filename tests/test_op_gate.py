@@ -1,7 +1,8 @@
 import pytest
 
+from app.db.models import User
 from app.op.base import OpContext, OpResult, Sponsor
-from app.op.gate import OpGate
+from app.op.gate import OpGate, providers_for_user
 
 
 class _Stub:
@@ -19,50 +20,41 @@ class _Stub:
 
 
 @pytest.mark.asyncio
-async def test_gate_blocks_on_piarflow_post_device(session, settings) -> None:
-    settings.tgrass_enabled = False
-    pf = _Stub(
-        "piarflow",
-        OpResult.blocked("piarflow", [Sponsor(title="Ch", url="https://t.me/x")]),
-    )
-    gate = OpGate(settings, [pf])
-    ctx = OpContext(1, 1, "A", None, "ru", False)
-    result = await gate.enforce(ctx, session, stage="post_device")
-    assert result.allowed is False
-    assert result.provider == "piarflow"
+async def test_verified_user_runs_piarflow_then_tgrass(session, settings) -> None:
+    settings.device_check_for_op = False
+    settings.twink_block_op = False
+    user = User(id=1, first_name="A")
+    pf = _Stub("piarflow", OpResult.ok("piarflow"))
+    tg = _Stub("tgrass", OpResult.ok("tgrass"))
+    gate = OpGate(settings, [pf, tg])
+    result = await gate.enforce(OpContext(1, 1, "A", None, "ru", False), session, user=user)
+    assert result.allowed is True
     assert pf.calls == 1
+    assert tg.calls == 1
+    assert providers_for_user(user, settings) == ("piarflow", "tgrass")
 
 
 @pytest.mark.asyncio
-async def test_pre_device_runs_tgrass_only(session, settings) -> None:
-    tg = _Stub(
-        "tgrass",
-        OpResult.blocked("tgrass", [Sponsor(title="T", url="https://t.me/t")]),
-    )
+async def test_unverified_user_tgrass_only(session, settings) -> None:
+    settings.device_check_enabled = True
+    settings.device_check_for_op = True
+    settings.web_public_url = "https://example.com"
+    user = User(id=2, first_name="B")  # no device_verified_at
     pf = _Stub(
         "piarflow",
         OpResult.blocked("piarflow", [Sponsor(title="P", url="https://t.me/p")]),
     )
-    gate = OpGate(settings, [tg, pf])
-    result = await gate.enforce(OpContext(1, 1, "A", None, "ru", False), session, stage="pre_device")
-    assert result.allowed is False
-    assert result.provider == "tgrass"
-    assert tg.calls == 1
-    assert pf.calls == 0
-
-
-@pytest.mark.asyncio
-async def test_post_device_skips_tgrass(session, settings) -> None:
     tg = _Stub(
         "tgrass",
         OpResult.blocked("tgrass", [Sponsor(title="T", url="https://t.me/t")]),
     )
-    pf = _Stub("piarflow", OpResult.ok("piarflow"))
-    gate = OpGate(settings, [tg, pf])
-    result = await gate.enforce(OpContext(1, 1, "A", None, "ru", False), session, stage="post_device")
-    assert result.allowed is True
-    assert tg.calls == 0
-    assert pf.calls == 1
+    gate = OpGate(settings, [pf, tg])
+    result = await gate.enforce(OpContext(2, 2, "B", None, "ru", False), session, user=user)
+    assert result.allowed is False
+    assert result.provider == "tgrass"
+    assert pf.calls == 0
+    assert tg.calls == 1
+    assert providers_for_user(user, settings) == ("tgrass",)
 
 
 @pytest.mark.asyncio

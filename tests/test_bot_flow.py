@@ -66,23 +66,49 @@ async def test_start_creates_user_credits_signup_and_shows_home(harness: BotHarn
 
 
 @pytest.mark.asyncio
-async def test_op_gate_requires_device_before_sponsors(harness: BotHarness) -> None:
+async def test_op_gate_unverified_skips_piarflow_allows_tgrass_skip(harness: BotHarness) -> None:
+    """Without device check, cascade is Tgrass-only; empty key → skip → home opens."""
     h = harness
     h.settings.web_public_url = "https://mini.example"
     h.settings.device_check_for_op = True
+    h.settings.tgrass_api_key = ""
+    h.settings.piarflow_api_key = "should-not-be-called"
     await _start(h, USER_ID)
-    assert "Сначала подтвердите устройство" in h.tg.last_text(USER_ID)
-    keyboard = h.tg.sent(SendMessage)[-1].reply_markup
-    assert keyboard is not None
-    assert keyboard.inline_keyboard[0][0].web_app.url == "https://mini.example/verify"
-
-    # Regular menu callbacks are blocked the same way (no PiarFlow call yet).
-    await h.feed(callback_update(USER_ID, "menu:daily"))
-    assert "Сначала подтвердите устройство" in h.tg.last_text(USER_ID)
+    assert "KodoStars" in h.tg.last_text(USER_ID)
+    async with h.factory() as session:
+        user = await session.get(User, USER_ID)
+        assert user.last_op_ok_at is not None
 
     # Admins bypass the gate entirely.
     await _start(h, ADMIN_ID)
     assert "KodoStars" in h.tg.last_text(ADMIN_ID)
+
+
+@pytest.mark.asyncio
+async def test_op_gate_unverified_shows_tgrass_sponsors(harness: BotHarness, monkeypatch) -> None:
+    from app.op.base import OpResult, Sponsor
+    from app.op.tgrass import TgrassAdapter
+
+    h = harness
+    h.settings.web_public_url = "https://mini.example"
+    h.settings.device_check_for_op = True
+    h.settings.tgrass_enabled = True
+    h.settings.tgrass_api_key = "tg-key"
+
+    async def _blocked(self, user):
+        return OpResult.blocked(
+            "tgrass",
+            [Sponsor(title="TG", url="https://t.me/tgchan")],
+            "Подпишитесь",
+        )
+
+    monkeypatch.setattr(TgrassAdapter, "check", _blocked)
+    monkeypatch.setattr(TgrassAdapter, "verify", _blocked)
+    await _start(h, USER_ID)
+    assert "tgrass" in h.tg.last_text(USER_ID).lower() or "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID)
+    # Menu stays gated until Tgrass is done.
+    await h.feed(callback_update(USER_ID, "menu:daily"))
+    assert "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID) or "задан" in h.tg.last_text(USER_ID).lower()
 
 
 @pytest.mark.asyncio

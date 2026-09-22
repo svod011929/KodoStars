@@ -38,6 +38,7 @@ from app.db.models import (
 )
 from app.op.gate import CASCADE, PROVIDER_DOCS, PROVIDER_TITLES
 from app.services.app_settings import format_value
+from app.services.promo import activation_link
 from app.services.audit import label as action_label
 from app.services.boosts import describe as describe_boost
 from app.services.stats import Dashboard
@@ -708,14 +709,27 @@ def promo_home(items: Sequence[PromoCode], page: int, total: int, page_size: int
     return "\n".join(lines)
 
 
-def promo_card(promo: PromoCode) -> str:
+def promo_card(promo: PromoCode, *, bot_username: str = "") -> str:
     limit = str(promo.max_uses) if promo.max_uses else "без лимита"
-    return (
-        f"🎟 <code>{h(promo.code)}</code> {'🟢 активен' if promo.is_active else '⚪ выключен'}\n\n"
-        f"Награда: {promo.reward} {STAR}\nАктиваций: {promo.uses} · лимит {limit}\n"
-        f"Действует до: {fmt_dt(promo.expires_at) if promo.expires_at else 'бессрочно'}\n"
-        f"Создан: {fmt_dt(promo.created_at)}"
-    )
+    lines = [
+        f"🎟 <code>{h(promo.code)}</code> {'🟢 активен' if promo.is_active else '⚪ выключен'}",
+        "",
+        f"Награда: {promo.reward} {STAR}",
+        f"Активаций: {promo.uses} · лимит {limit}",
+        f"Действует до: {fmt_dt(promo.expires_at) if promo.expires_at else 'бессрочно'}",
+        f"Создан: {fmt_dt(promo.created_at)}",
+    ]
+    if bot_username:
+        link = activation_link(bot_username, promo.code)
+        lines += [
+            "",
+            "<b>Код:</b> <code>" + h(promo.code) + "</code>",
+            f"<b>Ссылка-активатор:</b>\n<code>{h(link)}</code>",
+            "",
+            "Для рассылки укажите кнопку:",
+            f"<code>Активировать | {h(link)}</code>",
+        ]
+    return "\n".join(lines)
 
 
 def promo_new_code() -> str:
@@ -732,6 +746,14 @@ def promo_new_limit() -> str:
 
 def promo_new_days() -> str:
     return "Срок действия в днях (0 — бессрочно):"
+
+
+def promo_broadcast_prompt(promo: PromoCode, link: str) -> str:
+    return (
+        f"📣 Рассылка промокода <code>{h(promo.code)}</code> (+{promo.reward} {STAR})\n\n"
+        f"Кнопка уже будет: <b>Активировать</b> → {h(link)}\n\n"
+        "Отправьте сообщение рассылки (текст / фото / видео…) — дальше выберете аудиторию."
+    )
 
 
 # --- payments -----------------------------------------------------------------------
@@ -833,8 +855,9 @@ def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
     lines = [
         "🔒 <b>Провайдеры ОП</b>",
         "",
-        "Порядок: <b>Tgrass</b> (можно до проверки устройства) → антитвинк → "
-        "<b>PiarFlow</b> (только после проверки).",
+        "Порядок для пользователя:",
+        "• проверка устройства пройдена → <b>PiarFlow</b>, затем <b>Tgrass</b>;",
+        "• не пройдена → только <b>Tgrass</b>.",
         "Ошибки API — fail-open (не блокируют пользователей).",
         "",
         "Вебхуки отписок:",

@@ -42,8 +42,13 @@ async def bc_new(call: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.message(StateFilter(AdminFSM.bc_message))
-async def bc_message(message: Message, state: FSMContext) -> None:
+async def bc_message(message: Message, session: AsyncSession, state: FSMContext) -> None:
+    data = await state.get_data()
     await state.update_data(from_chat_id=message.chat.id, message_id=message.message_id)
+    # Promo deep-link flow already filled button_text/url — skip the button step.
+    if data.get("button_text") and data.get("button_url"):
+        await _ask_audience(message, session, state)
+        return
     await state.set_state(AdminFSM.bc_button)
     await message.answer(texts.broadcast_button_prompt(), reply_markup=kb.broadcast_button_step())
 

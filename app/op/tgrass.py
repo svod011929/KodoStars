@@ -5,7 +5,8 @@
 * Response ``status``: ``ok`` / ``not_ok`` / ``no_offers``
 * Offer ``subscribed`` bool; pending = not subscribed
 
-Shown **before** device/twin checks (see ``PRE_DEVICE_CASCADE``).
+Cascade: after PiarFlow when the user passed device/twin checks; alone otherwise
+(see ``providers_for_user``).
 """
 
 from __future__ import annotations

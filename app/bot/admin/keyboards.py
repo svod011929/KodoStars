@@ -461,6 +461,7 @@ def promo_card(promo: PromoCode) -> InlineKeyboardMarkup:
             button(toggle, f"admin:promo:{promo.id}:tg", icon=toggle_icon),
             button("Удалить", f"admin:promo:{promo.id}:del", icon="trash"),
         ],
+        [button("Рассылка с кнопкой", f"admin:promo:{promo.id}:bc", icon="broadcast")],
         [button("Промокоды", "admin:promo:list:0", icon="promo")],
     )
 
