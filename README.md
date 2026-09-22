@@ -184,7 +184,8 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 
 Эндпоинты: `GET /` (лендинг), `GET /health`, `GET /verify` (Mini App), `POST /api/device`
 (лимит 20 запросов/мин с IP), `POST /api/piarflow/webhook`,
-`POST /api/tgrass/webhook`, `POST /api/tgrass/unsubscribe`.
+`POST /api/tgrass/webhook`, `POST /api/tgrass/unsubscribe`,
+`GET /api/tgrass/member` (проверка подписки для закупки: `is_member` только после ОП).
 
 ## Вывод Stars
 
@@ -243,6 +244,12 @@ Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — пос
   `TGRASS_UNSUB_PENALTY`, уведомление. Идемпотентность: `tgrass_unsubs` (миграция `0009`).
 - Задания: `POST {WEB_PUBLIC_URL}/api/tgrass/webhook`
   (`tg_user_id`, `offer_id`, `offer_link`, `timestamp`) → ack + запись в антифрод-ленту.
+- Проверка подписки для закупки (@tgrassbot → «Задать URL»):
+  `GET {WEB_PUBLIC_URL}/api/tgrass/member?telegram_id=…&api_key=…`
+  Ответ строго `{"is_member": true|false}`. `true` — только если пользователь
+  прошёл ОП (`last_op_ok_at`), не забанен и не заблокировал бота. Один `/start`
+  без ОП даёт `false`, поэтому клик не засчитывается как подписка на бота.
+  Необязательный секрет — `TGRASS_MEMBER_KEY` (то же значение в «Задать API key»).
 
 ### PiarFlow
 

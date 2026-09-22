@@ -9,6 +9,7 @@ Routes:
 * ``POST /api/piarflow/webhook`` — PiarFlow unsubscribe webhook
 * ``POST /api/tgrass/webhook``   — Tgrass task + unsubscribe webhooks
 * ``POST /api/tgrass/unsubscribe`` — alias for Tgrass unsubscribe URL in @tgrassbot UI
+* ``GET /api/tgrass/member``    — Tgrass subscription check (member only after OP)
 
 The server listens on ``SERVER_PORT`` (RubyHost injects it) and is reachable through
 the panel's HTTPS address configured as ``WEB_PUBLIC_URL``.
@@ -32,9 +33,7 @@ from app import __version__
 from app.bot import brand
 from app.config import Settings
 from app.db.models import User
-from app.services import devices, events, referrals
-from app.services import piarflow_webhook
-from app.services import tgrass_webhook
+from app.services import devices, events, piarflow_webhook, referrals, tgrass_member, tgrass_webhook
 from app.services import tasks as task_service
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.errors import EconomyError
@@ -110,6 +109,8 @@ class WebServer:
         self._bot_username = bot_username
         self._events_sink = events_sink
         self._limiter = RateLimiter()
+        # Tgrass polls this from one IP while a traffic buy is running.
+        self._member_limiter = RateLimiter(per_minute=600)
         self._runner: web.AppRunner | None = None
 
     def build_app(self) -> web.Application:
@@ -121,6 +122,7 @@ class WebServer:
         app.router.add_post("/api/piarflow/webhook", self.piarflow_webhook)
         app.router.add_post("/api/tgrass/webhook", self.tgrass_webhook)
         app.router.add_post("/api/tgrass/unsubscribe", self.tgrass_webhook)
+        app.router.add_get("/api/tgrass/member", self.tgrass_member)
         return app
 
     async def start(self, host: str, port: int) -> None:
@@ -293,3 +295,22 @@ class WebServer:
             ip=ip,
         )
         return web.json_response({"ok": True})
+
+    async def tgrass_member(self, request: web.Request) -> web.Response:
+        """Tgrass «Проверка подписки»: true only after the user passed OP."""
+        ip = client_ip(request)
+        if not self._member_limiter.allow(f"tgm:{ip or 'unknown'}"):
+            return web.json_response({"is_member": False}, status=429)
+        async with self._factory() as session:
+            settings = await self._store.effective(session)
+            if not tgrass_member.member_key_matches(
+                settings.tgrass_member_key, request.query.get("api_key")
+            ):
+                log.info("tgrass_member_bad_key", ip=ip)
+                return web.json_response({"is_member": False})
+            raw_id = (request.query.get("telegram_id") or "").strip()
+            if not raw_id.isdigit():
+                return web.json_response({"is_member": False})
+            user = await session.get(User, int(raw_id))
+            member = tgrass_member.is_traffic_member(user)
+        return web.json_response({"is_member": member})

@@ -851,7 +851,13 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
     )
 
 
-def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
+def _member_check_url(settings: Settings) -> str:
+    if settings.web_public_url.strip():
+        return settings.web_url("/api/tgrass/member")
+    return "/api/tgrass/member"
+
+
+def providers_home(states: dict[str, bool], configured: dict[str, bool], settings: Settings) -> str:
     lines = [
         "🔒 <b>Провайдеры ОП</b>",
         "",
@@ -863,6 +869,13 @@ def providers_home(states: dict[str, bool], configured: dict[str, bool]) -> str:
         "Вебхуки отписок:",
         "• PiarFlow: <code>/api/piarflow/webhook</code>",
         "• Tgrass: <code>/api/tgrass/unsubscribe</code> (задания: <code>/api/tgrass/webhook</code>)",
+        "",
+        "Закупка Tgrass — «Проверка подписки»:",
+        f"• URL: <code>{h(_member_check_url(settings))}</code>",
+        "• <code>is_member: true</code> только после прохождения ОП "
+        "(старт бота сам по себе не считается).",
+        f"• API key (<code>TGRASS_MEMBER_KEY</code>): "
+        f"{'задан' if settings.tgrass_member_key.strip() else 'не задан'}",
         "",
         "Статистика выданных и засчитанных спонсоров PiarFlow — кнопки ниже.",
         "",

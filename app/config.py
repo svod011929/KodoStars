@@ -251,6 +251,9 @@ class Settings(BaseSettings):
     tgrass_api_url: str = "https://tgrass.space"
     tgrass_max_sponsors: int = 5
     tgrass_unsub_penalty: int = 10
+    # Optional secret Tgrass sends as ``api_key`` on GET /api/tgrass/member.
+    # Empty: the check accepts calls without a key (Tgrass marks the param optional).
+    tgrass_member_key: str = ""
 
     # Premium custom-emoji for the internal Stars currency (messages + icon="star").
     currency_emoji_id: str = _DEFAULT_CURRENCY_EMOJI_ID

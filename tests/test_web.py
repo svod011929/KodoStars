@@ -7,6 +7,7 @@ import hmac
 import json
 import time
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 import pytest
@@ -196,3 +197,45 @@ def test_rate_limiter() -> None:
     assert limiter.allow("a") is False
     assert limiter.allow("b") and limiter.allow("c")  # eviction keeps the structure bounded
     assert limiter.allow("a")  # "a" was evicted → fresh window
+
+
+@pytest.mark.asyncio
+async def test_tgrass_member_counts_only_after_op(web: Harness) -> None:
+    now = datetime.now(UTC)
+    async with web.factory() as session:
+        session.add(User(id=10, first_name="Started"))
+        session.add(User(id=11, first_name="Passed", last_op_ok_at=now))
+        session.add(User(id=12, first_name="Left", last_op_ok_at=now, blocked_bot_at=now))
+        session.add(User(id=13, first_name="Banned", last_op_ok_at=now, is_banned=True))
+        await session.commit()
+
+    unknown = await web.client.get("/api/tgrass/member", params={"telegram_id": "999"})
+    started = await web.client.get("/api/tgrass/member", params={"telegram_id": "10"})
+    passed = await web.client.get("/api/tgrass/member", params={"telegram_id": "11"})
+    left = await web.client.get("/api/tgrass/member", params={"telegram_id": "12"})
+    banned = await web.client.get("/api/tgrass/member", params={"telegram_id": "13"})
+    garbage = await web.client.get("/api/tgrass/member", params={"telegram_id": "nope"})
+
+    assert unknown.status == 200 and (await unknown.json()) == {"is_member": False}
+    assert (await started.json())["is_member"] is False
+    assert (await passed.json())["is_member"] is True
+    assert (await left.json())["is_member"] is False
+    assert (await banned.json())["is_member"] is False
+    assert (await garbage.json())["is_member"] is False
+
+
+@pytest.mark.asyncio
+async def test_tgrass_member_checks_api_key(web: Harness) -> None:
+    web.settings.tgrass_member_key = "secret"
+    async with web.factory() as session:
+        session.add(User(id=11, first_name="Passed", last_op_ok_at=datetime.now(UTC)))
+        await session.commit()
+
+    wrong = await web.client.get(
+        "/api/tgrass/member", params={"telegram_id": "11", "api_key": "nope"}
+    )
+    right = await web.client.get(
+        "/api/tgrass/member", params={"telegram_id": "11", "api_key": "secret"}
+    )
+    assert (await wrong.json())["is_member"] is False
+    assert (await right.json())["is_member"] is True
