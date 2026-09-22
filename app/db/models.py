@@ -345,6 +345,23 @@ class FraudEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class PiarflowIssuedSub(Base):
+    """Sponsors shown to a user (issued by PiarFlow ``/sponsors``)."""
+
+    __tablename__ = "piarflow_issued_subs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "offer_link", name="uq_piarflow_issued_sub"),
+        Index("ix_piarflow_issued_subs_last_shown", "last_shown_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    offer_link: Mapped[str] = mapped_column(String(512))
+    show_count: Mapped[int] = mapped_column(Integer, default=1)
+    first_shown_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_shown_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PiarflowPaidSub(Base):
     """Offer links for which PiarFlow credited a sale (status ``subscribed``)."""
 

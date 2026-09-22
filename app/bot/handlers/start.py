@@ -52,8 +52,7 @@ async def _gate_device_or_op(
     result = await op_gate.enforce(
         _ctx(user, chat_id, bot), session, verify=verify, settings=settings
     )
-    if result.paid_links:
-        await piarflow_quality.record_paid_subs(session, user.id, result.paid_links)
+    await piarflow_quality.record_from_op_result(session, user.id, result)
     if result.allowed:
         return "ok", None, None, result
     return (

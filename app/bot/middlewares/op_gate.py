@@ -72,8 +72,7 @@ class OpGateMiddleware(BaseMiddleware):
             bot=bot,
         )
         result = await self._gate.enforce(ctx, session, settings=settings)
-        if result.paid_links:
-            await piarflow_quality.record_paid_subs(session, user.id, result.paid_links)
+        await piarflow_quality.record_from_op_result(session, user.id, result)
         if result.allowed:
             user.last_op_ok_at = datetime.now(UTC)
             return await handler(event, data)
