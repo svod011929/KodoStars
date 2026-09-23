@@ -183,20 +183,3 @@ async def test_queue_and_totals(session, settings) -> None:
     assert totals["pending_count"] == 1
     assert totals["approved_manual_sum"] == 60
     assert await withdrawals.held_total(session) == 110
-
-
-@pytest.mark.asyncio
-async def test_fee_is_extra_and_comes_back_on_cancel(session, settings) -> None:
-    priced = settings.model_copy(update={"withdraw_fee": 1})
-    user = await _user(session, 70, credit=51)
-    wd = await withdrawals.apply(session, user=user, amount=50, settings=priced)
-    assert wd.fee == 1
-    assert await ledger.get_balance(session, user.id) == 0
-    kinds = [e.kind for e in await ledger.history(session, user.id, limit=10)]
-    assert LedgerKind.WITHDRAW_FEE.value in kinds
-    await withdrawals.cancel(session, withdrawal=wd, user=user)
-    assert await ledger.get_balance(session, user.id) == 51
-
-    short = await _user(session, 71, credit=50)
-    with pytest.raises(WithdrawalError, match="Недостаточно"):
-        await withdrawals.apply(session, user=short, amount=50, settings=priced)

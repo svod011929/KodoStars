@@ -431,7 +431,6 @@ def withdrawal_card(
         "",
         f"Пользователь: {name} (<code>{wd.user_id}</code>) {mention(wd.user_id, '↗')}",
         f"Сумма: <b>{h(wd.gift_label)}</b>",
-        *([f"Комиссия: {wd.fee} {STAR}"] if wd.fee else []),
         f"Создана: {fmt_dt(wd.created_at)} ({fmt_ago(wd.created_at)})",
     ]
     if wd.gift_id:
@@ -852,13 +851,16 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
     )
 
 
-def _member_check_url(settings: Settings) -> str:
+def _public_hook(settings: Settings, path: str) -> str:
     if settings.web_public_url.strip():
-        return settings.web_url("/api/tgrass/member")
-    return "/api/tgrass/member"
+        return settings.web_url(path)
+    return path
 
 
 def providers_home(states: dict[str, bool], configured: dict[str, bool], settings: Settings) -> str:
+    hook_note = ""
+    if not settings.web_public_url.strip():
+        hook_note = "\nWEB_PUBLIC_URL не задан — ниже только путь, не полный адрес."
     lines = [
         "🔒 <b>Провайдеры ОП</b>",
         "",
@@ -867,14 +869,13 @@ def providers_home(states: dict[str, bool], configured: dict[str, bool], setting
         "• не пройдена → только <b>Tgrass</b>.",
         "Ошибки API — fail-open (не блокируют пользователей).",
         "",
-        "Вебхуки отписок:",
-        "• PiarFlow: <code>/api/piarflow/webhook</code>",
-        "• Tgrass: <code>/api/tgrass/unsubscribe</code> (задания: <code>/api/tgrass/webhook</code>)",
-        "",
-        "Закупка Tgrass — «Проверка подписки»:",
-        f"• URL: <code>{h(_member_check_url(settings))}</code>",
-        "• <code>is_member: true</code> только после прохождения ОП "
-        "(старт бота сам по себе не считается).",
+        f"Вебхуки (копируйте адрес целиком):{hook_note}",
+        f"• PiarFlow, отписки: <code>{h(_public_hook(settings, '/api/piarflow/webhook'))}</code>",
+        f"• Tgrass, отписки: <code>{h(_public_hook(settings, '/api/tgrass/unsubscribe'))}</code>",
+        f"• Tgrass, задания: <code>{h(_public_hook(settings, '/api/tgrass/webhook'))}</code>",
+        f"• Tgrass, проверка подписки (закуп): "
+        f"<code>{h(_public_hook(settings, '/api/tgrass/member'))}</code>",
+        "• <code>is_member: true</code> только после прохождения ОП.",
         f"• API key (<code>TGRASS_MEMBER_KEY</code>): "
         f"{'задан' if settings.tgrass_member_key.strip() else 'не задан'}",
         "",

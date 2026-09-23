@@ -61,7 +61,7 @@ async def test_fresh_upgrade_matches_create_all(tmp_path: Path) -> None:
 
     assert migrated == created
     assert migrated_indexes == created_indexes
-    assert version == "0010_traffic_kit"
+    assert version == "0011_drop_withdraw_fee"
 
 
 @pytest.mark.asyncio

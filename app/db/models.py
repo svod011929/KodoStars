@@ -333,7 +333,6 @@ class Withdrawal(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     amount: Mapped[int] = mapped_column(Integer)
-    fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     gift_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     gift_emoji: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=WithdrawalStatus.PENDING.value)

@@ -2,6 +2,8 @@
 
 from app.bot import keyboards as user_kb
 from app.bot.admin import keyboards as admin_kb
+from app.bot.admin import texts as admin_texts
+from app.config import Settings
 
 
 def _callbacks(markup) -> set[str]:
@@ -51,3 +53,17 @@ def test_catalog_and_system_hubs() -> None:
 
     system = _callbacks(admin_kb.system_hub())
     assert {"admin:pay:0", "admin:adm", "admin:audit:0", "admin:fraud:0", "admin:data", "admin:home"} <= system
+
+
+def test_provider_screen_lists_full_webhook_urls() -> None:
+    shown = admin_texts.providers_home({}, {}, Settings(web_public_url="https://mini.example"))
+    for path in (
+        "/api/piarflow/webhook",
+        "/api/tgrass/unsubscribe",
+        "/api/tgrass/webhook",
+        "/api/tgrass/member",
+    ):
+        assert f"https://mini.example{path}" in shown
+    bare = admin_texts.providers_home({}, {}, Settings(web_public_url=""))
+    assert "WEB_PUBLIC_URL не задан" in bare
+    assert "/api/piarflow/webhook" in bare
