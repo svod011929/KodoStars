@@ -7,17 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.models import ProviderState, User
 from app.db.txn import commit_before_io
-from app.op.base import OpAdapter, OpContext, OpResult
+from app.op.base import CASCADE, OpAdapter, OpContext, OpResult
 from app.op.piarflow import PiarFlowAdapter
 from app.op.tgrass import TgrassAdapter
+from app.services import piarflow_quality
 from app.services.devices import op_access_block_reason
 
 log = structlog.get_logger("kodostars.op")
 
-# Admin toggle order. Runtime cascade for a user depends on twin/device status:
+# Runtime cascade for a user depends on twin/device status:
 # verified → PiarFlow then Tgrass; unverified → Tgrass only.
-CASCADE: tuple[str, ...] = ("piarflow", "tgrass")
-
 PROVIDER_TITLES: dict[str, str] = {
     "piarflow": "PiarFlow",
     "tgrass": "Tgrass",
@@ -73,7 +72,12 @@ class OpGate:
             adapter = self._by_name.get(name)
             if adapter is None:
                 continue
+            # Release the write lock before the provider HTTP call, including stats
+            # recorded for the previous adapter in this cascade.
+            await commit_before_io()
             result = await (adapter.verify(ctx) if verify else adapter.check(ctx))
+            if not result.skipped and not result.fail_open:
+                await piarflow_quality.record_from_op_result(session, ctx.user_id, result)
             if result.paid_links:
                 paid_links.extend(result.paid_links)
             log.info(

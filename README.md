@@ -307,7 +307,7 @@ Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — пос
 ## Миграции
 
 Схема управляется Alembic (`app/migrations`). При старте бот сам приводит БД к актуальной ревизии
-(сейчас head — `0011_drop_withdraw_fee`):
+(сейчас head — `0012_op_provider_stats`):
 
 - пустая БД → создаётся с нуля;
 - БД от версии 0.1 (`create_all`, без `alembic_version`) → штампуется `0001_baseline` и обновляется;
@@ -319,7 +319,8 @@ Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — пос
 `0008_ambassador_slots` (амбассадоры),
 `0009_tgrass_unsubs` (Tgrass вебхук отписок),
 `0010_traffic_kit` (приветки и кампании),
-`0011_drop_withdraw_fee` (комиссия вывода убрана).
+`0011_drop_withdraw_fee` (комиссия вывода убрана),
+`0012_op_provider_stats` (трафик ОП отдельно по PiarFlow и Tgrass).
 
 ```bash
 alembic current
@@ -370,7 +371,7 @@ app/
   op/                    # OpGate + адаптеры tgrass (pre-device) / piarflow (post-device)
   web/                   # Mini App + /api/device + piarflow/tgrass webhooks
   db/                    # models, session, seed, migrate
-  migrations/            # Alembic env + versions (…0011_drop_withdraw_fee)
+  migrations/            # Alembic env + versions (…0012_op_provider_stats)
 tests/
 docs/superpowers/specs/
 CONTRIBUTORS.md

@@ -76,19 +76,40 @@ class TgrassAdapter:
 
         result_status = str(data.get("status") or "").lower()
         offers = as_list(data.get("offers") if isinstance(data.get("offers"), list) else data)
+        paid = _subscribed_links(offers)
         if result_status in {"ok", "no_offers"}:
-            return OpResult.ok(self.name, message=str(data.get("description") or result_status))
+            return OpResult.ok(
+                self.name,
+                message=str(data.get("description") or result_status),
+                paid_links=paid,
+            )
         if result_status == "not_ok":
             sponsors = _pending(offers)
             if not sponsors:
-                return OpResult.ok(self.name)
+                return OpResult.ok(self.name, paid_links=paid)
             return OpResult.blocked(
                 self.name,
                 sponsors,
                 "Выполните задания Tgrass и нажмите «Я подписался».",
+                paid_links=paid,
             )
         # Unknown status — fail-open rather than lock users out.
         return OpResult.fail_open_result(self.name, f"unknown status={result_status or status}")
+
+
+def _subscribed_links(items: list[Any]) -> list[str]:
+    """Links the user already completed (``subscribed: true``). Those are credited sales."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict) or not bool(item.get("subscribed")):
+            continue
+        url = str(item.get("link") or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        result.append(url)
+    return result
 
 
 def _pending(items: list[Any]) -> list[Sponsor]:

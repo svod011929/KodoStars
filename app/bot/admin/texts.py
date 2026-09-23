@@ -38,9 +38,9 @@ from app.db.models import (
 )
 from app.op.gate import CASCADE, PROVIDER_DOCS, PROVIDER_TITLES
 from app.services.app_settings import format_value
-from app.services.promo import activation_link
 from app.services.audit import label as action_label
 from app.services.boosts import describe as describe_boost
+from app.services.promo import activation_link
 from app.services.stats import Dashboard
 from app.services.tasks import task_target
 
@@ -70,7 +70,7 @@ def home(version: str, pending: int, running_broadcast: bool, maintenance: bool)
         f"🛠 <b>Админка</b> <i>v{h(version)}</i>{status}{queue}\n\n"
         "<b>Операции</b> — статистика, пользователи, выводы, амбассадоры, рассылка\n"
         "<b>Каталог</b> — задания, бусты, промокоды\n"
-        "<b>PiarFlow</b> — ОП и трафик\n"
+        "<b>ОП</b> — провайдеры и трафик\n"
         "<b>Система</b> — платежи, админы, журнал, антифрод, данные"
     )
 
@@ -93,7 +93,7 @@ def stats(
     d: Dashboard,
     star_balance: int | None,
     days: Sequence[tuple[str, int]],
-    pf=None,
+    traffic: Sequence[tuple[str, Any]] | None = None,
 ) -> str:
     kinds = "\n".join(
         f"   • {h(LEDGER_KIND_LABELS.get(kind, kind))}: {total}"
@@ -103,13 +103,15 @@ def stats(
     last_bc = f"#{lb.id} · {lb.status} · {lb.sent}/{lb.total} · {fmt_ago(lb.created_at)}" if lb else "—"
     star_line = f"\n💫 Баланс Stars бота: <b>{star_balance}</b> XTR" if star_balance is not None else ""
     spark = " ".join(f"{day[5:]}:{count}" for day, count in days) or "—"
-    pf_line = ""
-    if pf is not None:
-        pf_line = (
-            f"\n\n📣 PiarFlow: выдано {pf.issued_total} (сегодня {pf.issued_today}) · "
-            f"засчитано {pf.credited_total} (сегодня {pf.credited_today}) · "
-            f"конверсия {pf.conversion_pct:.0f}%"
+    traffic_rows = []
+    for name, row in traffic or ():
+        title = h(PROVIDER_TITLES.get(name, name))
+        traffic_rows.append(
+            f"📣 {title}: выдано {row.issued_total} (сегодня {row.issued_today}) · "
+            f"засчитано {row.credited_total} (сегодня {row.credited_today}) · "
+            f"конверсия {row.conversion_pct:.0f}%"
         )
+    traffic_line = ("\n\n" + "\n".join(traffic_rows)) if traffic_rows else ""
     return (
         "📊 <b>Статистика</b>\n\n"
         f"👥 Пользователи: <b>{d.users_total}</b> "
@@ -132,13 +134,13 @@ def stats(
         f"🎟 промо: {d.promo_redemptions}\n"
         f"🛡 Устройство подтвердили: {d.device_verified} · 👯 твинков: {d.twinks}\n"
         f"📣 Последняя рассылка: {last_bc}"
-        f"{pf_line}"
+        f"{traffic_line}"
     )
 
 
-def piarflow_traffic(t) -> str:
+def _traffic_section(title: str, t) -> str:
     return (
-        "📊 <b>PiarFlow · трафик</b>\n\n"
+        f"<b>{h(title)}</b>\n"
         f"📤 Выдано спонсоров (уник. user+link): <b>{t.issued_total}</b>\n"
         f"   сегодня {t.issued_today} · 7 дн {t.issued_7d} · показов всего {t.shows_total}\n"
         f"   уникальных пользователей: {t.unique_users_issued}\n\n"
@@ -150,6 +152,20 @@ def piarflow_traffic(t) -> str:
     )
 
 
+def op_traffic(blocks: Sequence[tuple[str, Any]]) -> str:
+    parts = ["📊 <b>Трафик ОП</b>"]
+    if not blocks:
+        parts.append("\nПровайдеры ОП не настроены.")
+    for name, row in blocks:
+        parts.append("")
+        parts.append(_traffic_section(PROVIDER_TITLES.get(name, name), row))
+    return "\n".join(parts)
+
+
+def _provider_label(provider: str) -> str:
+    return h(PROVIDER_TITLES.get(provider, provider))
+
+
 def piarflow_issued_list(rows, names: dict[int, str], page: int, total: int, page_size: int) -> str:
     lines = ["📤 <b>Выданные спонсоры</b>", ""]
     if not rows:
@@ -158,7 +174,7 @@ def piarflow_issued_list(rows, names: dict[int, str], page: int, total: int, pag
         name = h(names.get(row.user_id, str(row.user_id)))
         link = h(row.offer_link[:48] + ("…" if len(row.offer_link) > 48 else ""))
         lines.append(
-            f"• <code>{row.user_id}</code> {name}\n"
+            f"• {_provider_label(row.provider)} · <code>{row.user_id}</code> {name}\n"
             f"  {link}\n"
             f"  показов {row.show_count} · последний {fmt_ago(row.last_shown_at)}"
         )
@@ -170,12 +186,12 @@ def piarflow_issued_list(rows, names: dict[int, str], page: int, total: int, pag
 def piarflow_credited_list(rows, names: dict[int, str], page: int, total: int, page_size: int) -> str:
     lines = ["✅ <b>Засчитанные подписки</b>", ""]
     if not rows:
-        lines.append("Пока пусто — PiarFlow ещё не засчитал subscribed.")
+        lines.append("Пока пусто — подписки ещё не засчитаны.")
     for row in rows:
         name = h(names.get(row.user_id, str(row.user_id)))
         link = h(row.offer_link[:48] + ("…" if len(row.offer_link) > 48 else ""))
         lines.append(
-            f"• <code>{row.user_id}</code> {name}\n"
+            f"• {_provider_label(row.provider)} · <code>{row.user_id}</code> {name}\n"
             f"  {link}\n"
             f"  {fmt_ago(row.created_at)}"
         )
@@ -879,7 +895,7 @@ def providers_home(states: dict[str, bool], configured: dict[str, bool], setting
         f"• API key (<code>TGRASS_MEMBER_KEY</code>): "
         f"{'задан' if settings.tgrass_member_key.strip() else 'не задан'}",
         "",
-        "Статистика выданных и засчитанных спонсоров PiarFlow — кнопки ниже.",
+        "Статистика выданных и засчитанных спонсоров по каждому провайдеру — кнопки ниже.",
         "",
     ]
     for name in CASCADE:

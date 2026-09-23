@@ -79,7 +79,7 @@ def back_home(*rows: list) -> InlineKeyboardMarkup:
 def stats() -> InlineKeyboardMarkup:
     return markup(
         [button("Обновить", "admin:stats", icon="refresh"), button("Сверка", "admin:reconcile", icon="code")],
-        [button("PiarFlow трафик", "admin:pf:stats", icon="megaphone")],
+        [button("Трафик ОП", "admin:pf:stats", icon="megaphone")],
         [_back()],
     )
 
@@ -585,7 +585,7 @@ def piarflow_stats() -> InlineKeyboardMarkup:
             button("Выданные", "admin:pf:issued:0", icon="upload"),
             button("Засчитанные", "admin:pf:credited:0", icon="check"),
         ],
-        [button("Обновить", "admin:pf:stats", icon="refresh"), button("PiarFlow", "admin:prov", icon="lock")],
+        [button("Обновить", "admin:pf:stats", icon="refresh"), button("ОП", "admin:prov", icon="lock")],
     )
 
 
@@ -593,7 +593,7 @@ def piarflow_list(kind: str, page: int, total: int) -> InlineKeyboardMarkup:
     prefix = f"admin:pf:{kind}"
     return markup(
         pager(prefix, page, total, PAGE_SIZE),
-        [button("Трафик", "admin:pf:stats", icon="stats"), button("PiarFlow", "admin:prov", icon="lock")],
+        [button("Трафик", "admin:pf:stats", icon="stats"), button("ОП", "admin:prov", icon="lock")],
     )
 
 

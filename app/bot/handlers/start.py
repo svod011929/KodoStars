@@ -15,7 +15,7 @@ from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
-from app.services import botohub_views, campaigns, greetings, piarflow_quality, referrals, users
+from app.services import botohub_views, campaigns, greetings, referrals, users
 from app.services import promo as promo_service
 from app.services.antifraud import bump_activity
 from app.services.errors import EconomyError
@@ -50,7 +50,6 @@ async def _gate_op(
     result = await op_gate.enforce(
         ctx, session, verify=verify, settings=settings, user=user
     )
-    await piarflow_quality.record_from_op_result(session, user.id, result)
     if result.allowed:
         return "ok", None, None, result
     return (

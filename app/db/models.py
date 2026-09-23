@@ -375,31 +375,33 @@ class FraudEvent(Base):
 
 
 class PiarflowIssuedSub(Base):
-    """Sponsors shown to a user (issued by PiarFlow ``/sponsors``)."""
+    """Sponsors shown to a user, one row per OP provider + user + link."""
 
     __tablename__ = "piarflow_issued_subs"
     __table_args__ = (
-        UniqueConstraint("user_id", "offer_link", name="uq_piarflow_issued_sub"),
+        UniqueConstraint("provider", "user_id", "offer_link", name="uq_piarflow_issued_sub"),
         Index("ix_piarflow_issued_subs_last_shown", "last_shown_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     offer_link: Mapped[str] = mapped_column(String(512))
+    provider: Mapped[str] = mapped_column(String(32), default="piarflow", server_default="piarflow")
     show_count: Mapped[int] = mapped_column(Integer, default=1)
     first_shown_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_shown_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class PiarflowPaidSub(Base):
-    """Offer links for which PiarFlow credited a sale (status ``subscribed``)."""
+    """Offer links a provider credited (PiarFlow ``subscribed`` / Tgrass ``subscribed``)."""
 
     __tablename__ = "piarflow_paid_subs"
-    __table_args__ = (UniqueConstraint("user_id", "offer_link", name="uq_piarflow_paid_sub"),)
+    __table_args__ = (UniqueConstraint("provider", "user_id", "offer_link", name="uq_piarflow_paid_sub"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     offer_link: Mapped[str] = mapped_column(String(512))
+    provider: Mapped[str] = mapped_column(String(32), default="piarflow", server_default="piarflow")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
