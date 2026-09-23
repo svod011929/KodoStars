@@ -444,6 +444,10 @@ def withdraw_home(
     if settings.withdraw_max:
         limits += f" · максимум: {settings.withdraw_max} {STAR}"
     lines += [limits, f"Кулдаун между заявками: {settings.withdraw_cooldown_hours} ч."]
+    if settings.withdraw_fee > 0:
+        lines.append(
+            f"Комиссия: <b>{settings.withdraw_fee} {STAR}</b> сверху. Вернётся, если заявку отклонят."
+        )
     if settings.withdraw_min_referrals:
         lines.append(f"Нужно активных рефералов: {settings.withdraw_min_referrals}")
     if not settings.withdraw_enabled:
@@ -471,8 +475,11 @@ def withdraw_home(
 
 
 def withdraw_created(wd: Withdrawal) -> str:
+    fee = ""
+    if wd.fee:
+        fee = f"\nКомиссия: <b>{wd.fee} {STAR}</b> (списана)."
     return (
-        f"✅ Заявка #{wd.id} на <b>{h(wd.gift_label)}</b> создана.\n"
+        f"✅ Заявка #{wd.id} на <b>{h(wd.gift_label)}</b> создана.{fee}\n"
         "Сумма зарезервирована. Мы уведомим вас, когда администратор её обработает."
     )
 
@@ -553,7 +560,9 @@ def help_text(settings: Settings, is_admin: bool) -> str:
         f"{ref_rules}\n"
         "• <b>Уровни</b> — XP за любые действия, множитель до ×2.\n"
         "• <b>Бусты</b> — множители и паки за Telegram Stars (XTR).\n"
-        f"• <b>Вывод</b> — от {settings.withdraw_min} {STAR}, выбор готового подарка Telegram.\n\n"
+        f"• <b>Вывод</b> — от {settings.withdraw_min} {STAR}"
+        + (f", комиссия {settings.withdraw_fee} {STAR}" if settings.withdraw_fee else "")
+        + ", выбор готового подарка Telegram.\n\n"
         "Команды: /menu — меню, /profile — профиль, /help — эта справка, "
         "/paysupport — вопросы по оплате."
         f"{support}{admin}"

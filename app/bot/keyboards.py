@@ -79,6 +79,12 @@ def history_menu(page: int, total: int) -> InlineKeyboardMarkup:
     )
 
 
+def greeting_keyboard(text: str | None, url: str | None) -> InlineKeyboardMarkup | None:
+    if not text or not url:
+        return None
+    return markup([url_button(text, url)])
+
+
 def referrals_menu(link: str, share_text: str) -> InlineKeyboardMarkup:
     share_url = f"https://t.me/share/url?url={quote(link, safe='')}&text={quote(share_text, safe='')}"
     return markup(

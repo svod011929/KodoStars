@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -32,6 +32,7 @@ class LedgerKind(StrEnum):
     REFERRAL_BONUS = "referral_bonus"
     REFERRAL_SHARE = "referral_share"
     WITHDRAW_HOLD = "withdraw_hold"
+    WITHDRAW_FEE = "withdraw_fee"
     WITHDRAW_REFUND = "withdraw_refund"
     WITHDRAW_SENT = "withdraw_sent"
     ADMIN_ADJUST = "admin_adjust"
@@ -48,6 +49,7 @@ LEDGER_KIND_LABELS: dict[str, str] = {
     LedgerKind.REFERRAL_BONUS.value: "Бонус за реферала",
     LedgerKind.REFERRAL_SHARE.value: "Доля с реферала",
     LedgerKind.WITHDRAW_HOLD.value: "Заявка на вывод",
+    LedgerKind.WITHDRAW_FEE.value: "Комиссия за вывод",
     LedgerKind.WITHDRAW_REFUND.value: "Возврат по заявке",
     LedgerKind.WITHDRAW_SENT.value: "Выплата",
     LedgerKind.ADMIN_ADJUST.value: "Корректировка админа",
@@ -331,6 +333,7 @@ class Withdrawal(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     amount: Mapped[int] = mapped_column(Integer)
+    fee: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     gift_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     gift_emoji: Mapped[str | None] = mapped_column(String(16), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default=WithdrawalStatus.PENDING.value)
@@ -560,3 +563,49 @@ class PromoRedemption(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     amount: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+class Greeting(Base):
+    """Rotating welcome post shown after a user gets into the bot."""
+
+    __tablename__ = "greetings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    body: Mapped[str] = mapped_column(Text)
+    button_text: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    button_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    shows: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )
+
+
+class Campaign(Base):
+    """Traffic-buy link ``?start=c_CODE``."""
+
+    __tablename__ = "campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True)
+    title: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )
+
+
+class CampaignHit(Base):
+    __tablename__ = "campaign_hits"
+    __table_args__ = (Index("ix_campaign_hits_campaign_created", "campaign_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int] = mapped_column(Integer, ForeignKey("campaigns.id"), index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    is_new: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )

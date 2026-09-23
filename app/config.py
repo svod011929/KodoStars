@@ -25,6 +25,7 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "withdraw_max": int,
     "withdraw_cooldown_hours": int,
     "withdraw_min_referrals": int,
+    "withdraw_fee": int,
     "withdraw_enabled": bool,
     "signup_bonus": int,
     "claim_cooldown_seconds": int,
@@ -67,6 +68,7 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "withdraw_max": "Вывод: максимум, ⭐ (0 = без лимита)",
     "withdraw_cooldown_hours": "Вывод: кулдаун, ч",
     "withdraw_min_referrals": "Вывод: мин. активных рефералов",
+    "withdraw_fee": "Вывод: комиссия, ⭐",
     "withdraw_enabled": "Вывод включён",
     "signup_bonus": "Бонус за регистрацию, ⭐",
     "claim_cooldown_seconds": "Антиспам: пауза между действиями, с",
@@ -121,6 +123,7 @@ SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
         "withdraw_max",
         "withdraw_cooldown_hours",
         "withdraw_min_referrals",
+        "withdraw_fee",
         "payout_log_chat_id",
     ),
     "antifraud": (
@@ -209,6 +212,7 @@ class Settings(BaseSettings):
     withdraw_max: int = 0
     withdraw_cooldown_hours: int = 24
     withdraw_min_referrals: int = 0
+    withdraw_fee: int = 0
     withdraw_enabled: bool = True
     signup_bonus: int = 5
     claim_cooldown_seconds: int = 3
@@ -301,6 +305,7 @@ class Settings(BaseSettings):
         "withdraw_max",
         "withdraw_cooldown_hours",
         "withdraw_min_referrals",
+        "withdraw_fee",
         "signup_bonus",
         "claim_cooldown_seconds",
         "op_cache_sec",

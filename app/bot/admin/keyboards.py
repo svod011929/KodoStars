@@ -58,6 +58,7 @@ def catalog_hub() -> InlineKeyboardMarkup:
     return markup(
         [button("Задания", "admin:tasks", icon="tasks"), button("Бусты", "admin:boosts", icon="boost")],
         [button("Промокоды", "admin:promo:list:0", icon="promo")],
+        [button("Приветки", "admin:greet", icon="megaphone"), button("Кампании", "admin:camp", icon="growth")],
         [_back()],
     )
 
