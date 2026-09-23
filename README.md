@@ -16,7 +16,7 @@
   <a href="https://github.com/svod011929/KodoStars"><img src="https://img.shields.io/badge/GitHub-KodoStars-0D1117?style=for-the-badge&logo=github&logoColor=34D399" alt="repo" /></a>
   <a href="https://t.me/gveom"><img src="https://img.shields.io/badge/Telegram-@gveom-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="tg" /></a>
   <a href="https://github.com/svod011929"><img src="https://img.shields.io/badge/Author-svod011929-7C3AED?style=for-the-badge&logo=github&logoColor=white" alt="author" /></a>
-  <img src="https://img.shields.io/badge/version-1.4.0-34D399?style=for-the-badge" alt="version" />
+  <img src="https://img.shields.io/badge/version-1.5.0-34D399?style=for-the-badge" alt="version" />
 </p>
 
 <!-- /kododrive-readme-style -->
@@ -44,14 +44,26 @@ UI использует Telegram **premium emoji** (`<tg-emoji>` в сообще
 
 Интерфейс — русский. Выплаты пользователям — **только Telegram Stars**. CryptoBot нет.
 
-Автор: [KodoDrive](https://github.com/svod011929) · Релиз: [v1.4.0](https://github.com/svod011929/KodoStars/releases/tag/v1.4.0)
+Автор: [KodoDrive](https://github.com/svod011929) · Релиз: [v1.5.0](https://github.com/svod011929/KodoStars/releases/tag/v1.5.0)
+
+## Что нового в 1.5.0
+
+Срез `main` после [v1.4.0](https://github.com/svod011929/KodoStars/releases/tag/v1.4.0):
+
+- Главный экран открывается оффером «N ★ за каждого друга». Первая кнопка — «N за друга». Стена ОП и «Поделиться» называют эту выплату.
+- Кнопка «Активировать» у промокода (`/start promo_…`) начисляет награду и не упирается в кулдаун «Слишком часто». Ручной ввод кода кулдаун по-прежнему учитывает.
+- Закуп Tgrass: `GET /api/tgrass/member` отвечает `is_member: true` только после прохождения ОП. В админке все вебхуки показаны полным адресом (`WEB_PUBLIC_URL`).
+- **Каталог → Приветки** — ротация сообщения после входа (не на стене ОП). **Каталог → Кампании** — ссылки `?start=c_CODE` и `utm_CODE`, клики и уникальные пользователи за день / 7 дней / всё время.
+- **Трафик ОП** считается отдельно по PiarFlow и по Tgrass: выдано, зачтено, конверсия, отписки. Реферальный порог по-прежнему смотрит только на оплаченные подписки PiarFlow.
+- Вывод резервирует стоимость подарка. Отдельной комиссии нет.
 
 ## Что умеет бот
 
 ### Для пользователя
 
 - `/start` и deep-link `ref_<tg_id>`; реферер привязывается **только при первом запуске** (защита от переатрибуции старых аккаунтов)
-- Компактное главное меню: ежедневка / задания · профиль / рефералы · вывод / бусты · промо / топ / помощь (+ амбассадор и админка при доступе)
+- Главный экран начинается с «N ★ за каждого друга», если бонус L1 больше нуля
+- Компактное главное меню: первая кнопка **«N за друга»**, затем ежедневка · задания / профиль · вывод / бусты · топ / промокод · амбассадор / помощь (+ админка при доступе)
 - Двухуровневая рефералка: бонус за активацию друга + процент с его заработка; уведомления «пришёл новый друг» и «друг активировался: +N ⭐»
 - Активация реферала: чеклист в UI (активность + устройство + минимум **`REFERRAL_MIN_PIARFLOW_SUBS`**, по умолчанию 2, ресурсов PiarFlow со статусом `subscribed`)
 - Кнопка **«Поделиться ссылкой»** (`t.me/share/url`) и место в топе рефереров
@@ -59,11 +71,11 @@ UI использует Telegram **premium emoji** (`<tg-emoji>` в сообще
 - Антифрод-кулдаун на claim (`CLAIM_COOLDOWN_SECONDS`) — только реальные действия «заработать», не stamp присутствия
 - Задания: подписка на канал (проверка через `getChatMember`), приглашения, серии, переход по ссылке; автозачёт по событиям
 - Уровни (XP → множитель до ×2) с прогресс-баром, бусты-множители и паки Stars за XTR
-- Промокоды с лимитом активаций и сроком; deep-link `promo_<CODE>` и кнопка «Активировать» в рассылке
+- Промокоды с лимитом активаций и сроком; deep-link `promo_<CODE>` и кнопка «Активировать» в рассылке. Переход по кнопке начисляет код сразу после ОП и не ловит кулдаун claim
 - **Амбассадор**: несколько слотов (канал/чат/бот) → после одобрения полный кастом L1/L2 (берётся max по полям), гибридный дневной промокод и опциональный двухшаговый автопост
 - Топ по рефералам и по заработку за 7 дней (ники маскируются)
 - История операций с пагинацией, список заявок, отмена своей `pending`-заявки
-- Вывод: выбор готового подарка Telegram по `star_count`, холд средств; для Fragment нужен `@username`
+- Вывод: выбор готового подарка Telegram по `star_count`, холд на эту сумму, без отдельной комиссии; для Fragment нужен `@username`
 - `/menu`, `/profile`, `/help`, `/terms`, `/paysupport` (обязательные для ботов, принимающих Stars)
 
 ### Для администратора (`/admin`)
@@ -72,14 +84,14 @@ UI использует Telegram **premium emoji** (`<tg-emoji>` в сообще
 
 | Раздел | Возможности |
 | --- | --- |
-| Статистика | пользователи всего/сегодня/7д/30д, регистрации по дням, DAU/WAU, баны и блокировки бота, воронка рефералов, экономика по видам начислений, холд, выводы, выручка XTR, **баланс Stars бота** (`getMyStarBalance`), сверка балансов с леджером, **PiarFlow трафик** (выдано / засчитано / конверсия) |
+| Статистика | пользователи всего/сегодня/7д/30д, регистрации по дням, DAU/WAU, баны и блокировки бота, воронка рефералов, экономика по видам начислений, холд, выводы, выручка XTR, **баланс Stars бота** (`getMyStarBalance`), сверка балансов с леджером, **трафик ОП по каждому провайдеру** (выдано / засчитано / конверсия) |
 | Пользователи | поиск по ID/@username, карточка (баланс, холд, уровень, рефералы, платежи, выплаты, фрод, устройство), ±баланс с причиной, бан/разбан, заметка, сообщение пользователю, леджер, список рефералов, подозрительные рефереры, флаг «доверенный» |
 | Выводы | очередь по статусам с пагинацией, карточка с контекстом пользователя, согласовать / отклонить с причиной / **Отправить через Fragment** или подтвердить ручную выплату; карточка новой заявки приходит админам сразу |
 | Амбассадоры | очередь заявок, одобрение с кастомными L1/L2 и шаблоном дневного промо, chat_id + автопост (бот должен быть админом), отзыв |
 | Рассылка | любой тип контента (`copyMessage`), опциональная URL-кнопка, аудитория (все / активные 7д / активированные), тест себе, фоновая отправка с rate-limit и обработкой `RetryAfter`, прогресс-карточка, остановка |
-| Каталог | задания / бусты / промокоды — мастер создания (код + ссылка-активатор + рассылка с кнопкой), редактирование, вкл/выкл, мягкое удаление |
+| Каталог | задания / бусты / промокоды (код + ссылка-активатор + рассылка с кнопкой), **Приветки**, **Кампании** закупки — редактирование, вкл/выкл, мягкое удаление |
 | Настройки | хабы: рефералы / награды / вывод / антитвинк / трафик / система — экономика, BotoHub Views, канал выплат, антитвинк — **без перезапуска** |
-| ОП | тумблеры **PiarFlow** и **Tgrass** + статистика выданных/засчитанных спонсоров PiarFlow |
+| ОП | тумблеры **PiarFlow** и **Tgrass**, экран **Трафик ОП** (выдано / зачтено / конверсия / отписки отдельно по каждому), списки выданных и засчитанных, **полные URL** вебхуков |
 | Система | платежи (возврат через `refundStarPayment`), админы, журнал аудита, антифрод/твинки, экспорт/импорт CSV |
 
 Режим обслуживания, поддержка и лимиты вывода — тоже переключаются из панели.
@@ -149,7 +161,7 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 | Экономика | `REFERRAL_LEVELS`, проценты/бонусы L1/L2, `MIN_REFERRAL_ACTIVITY`, **`REFERRAL_MIN_PIARFLOW_SUBS`**, `NOTIFY_REFERRER`, ежедневка, `SIGNUP_BONUS`, `CLAIM_COOLDOWN_SECONDS`, **`CURRENCY_EMOJI_ID`**, **`CURRENCY_EMOJI_FALLBACK`** |
 | Вывод | `WITHDRAW_ENABLED`, `WITHDRAW_MIN`, `WITHDRAW_MAX`, `WITHDRAW_COOLDOWN_HOURS`, `WITHDRAW_MIN_REFERRALS`, `PAYOUT_LOG_CHAT_ID` |
 | Операционные | `MAINTENANCE_MODE`, `MAINTENANCE_TEXT`, `BROADCAST_RATE_PER_SEC`, `THROTTLE_SECONDS` |
-| PiarFlow / Tgrass | `PIARFLOW_*`, `TGRASS_*` (ключи, лимиты, штрафы за отписку) |
+| PiarFlow / Tgrass | `PIARFLOW_*`, `TGRASS_*` (ключи, лимиты, штрафы за отписку), **`TGRASS_MEMBER_KEY`** для проверки закупки |
 | BotoHub Views | `BOTOHUB_VIEWS_ENABLED`, `BOTOHUB_VIEWS_TOKEN`, `BOTOHUB_VIEWS_COOLDOWN_SECONDS`, опционально `BOTOHUB_VIEWS_API_URL` |
 | Fragment | `FRAGMENT_WALLET_MNEMONIC`, `FRAGMENT_COOKIES`, опционально `FRAGMENT_TONAPI_KEY`, `FRAGMENT_WALLET_VERSION`, `FRAGMENT_SHOW_SENDER` |
 | Логи | `LOG_LEVEL`, `LOG_JSON` |
@@ -192,8 +204,8 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 Пользователь выбирает **готовый подарок** из каталога Telegram (`getAvailableGifts`). Стоимость
 подарка (`star_count`) резервируется на внутреннем балансе:
 
-1. Пользователь создаёт заявку — сумма **резервируется** (холд), админы получают карточку.
-   У пользователя должен быть `@username` (Fragment отправляет Stars по нику).
+1. Пользователь создаёт заявку — стоимость подарка **резервируется** (холд). Отдельной комиссии нет.
+   Админы получают карточку. У пользователя должен быть `@username` (Fragment отправляет Stars по нику).
 2. Админ нажимает **Согласовать** → пользователь получает уведомление.
 3. Админ жмёт **Отправить через Fragment** — бот покупает Stars на Fragment.com
    (`FRAGMENT_WALLET_MNEMONIC` + `FRAGMENT_COOKIES`) и закрывает заявку. Либо отмечает
@@ -221,8 +233,9 @@ long polling (+ веб-сервер Mini App / вебхук, если задан
 1. Бан → отказ.
 2. Если устройство/твинк **OK** → **PiarFlow**, затем **Tgrass**.
 3. Если проверка **не пройдена** → только **Tgrass** (PiarFlow не выдаётся).
-4. Ссылки PiarFlow со статусом **`subscribed`** пишутся в `piarflow_paid_subs` и учитываются для
-   реферального бонуса (`REFERRAL_MIN_PIARFLOW_SUBS`).
+4. Зачтённые ссылки пишутся в `piarflow_paid_subs` с полем `provider`: PiarFlow — статус
+   **`subscribed`**, Tgrass — оффер с `subscribed: true`. Реферальный бонус считает только
+   строки `provider=piarflow` (`REFERRAL_MIN_PIARFLOW_SUBS`).
 
 Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — после ОП
 начисляет награду (кнопка «Активировать» в рассылке ведёт сюда).
@@ -268,8 +281,12 @@ Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — пос
 | Ошибка API | fail-open |
 
 Админ может выключить провайдеров в рантайме (таблица `provider_states`).
-В **Админка → PiarFlow** — тумблеры + статистика выданных/засчитанных спонсоров.
-Учёт PiarFlow: `piarflow_issued_subs` (выдача) и `piarflow_paid_subs` (зачёт).
+В **Админка → ОП** — тумблеры, экран **Трафик ОП** (отдельный блок на PiarFlow и на Tgrass:
+выдано, зачтено, конверсия, отписки) и полные адреса вебхуков. Если `WEB_PUBLIC_URL` пуст,
+показан путь и пометка, что публичный адрес не задан.
+Учёт выдачи и зачёта: `piarflow_issued_subs` и `piarflow_paid_subs`, уникальность
+`(provider, user_id, offer_link)`. Старые строки остаются на PiarFlow. Отписки — свои таблицы
+`piarflow_unsubs` и `tgrass_unsubs`.
 
 ### Вебхук отписок PiarFlow
 
@@ -334,15 +351,16 @@ alembic upgrade head
 ## Тесты и качество
 
 ```bash
-pytest          # ~188 тестов
+pytest          # 216 тестов
 ruff check .    # линт
 ruff format .   # форматирование
 ```
 
 Покрыты: атомарный леджер и сверка, холд/возврат выводов, идемпотентность платежей и возвраты,
-ежедневка и серии, задания, рефералы (первый старт, уровни, доля, гейт по paid PiarFlow, copy активации),
-промокоды, настройки в рантайме (в т.ч. валютный emoji / entity paste), роли админов, аудит,
-фоновая рассылка, статистика/экспорт, миграции, контракт PiarFlow, Fragment-конфиг,
+ежедневка и серии, задания, рефералы (первый старт, уровни, доля, гейт только по paid PiarFlow, copy активации),
+промокоды (в том числе deep-link без кулдауна claim), настройки в рантайме (в т.ч. валютный emoji / entity paste), роли админов, аудит,
+фоновая рассылка, статистика/экспорт, миграции, контракты PiarFlow и Tgrass, членство Tgrass после ОП,
+трафик ОП по провайдерам, приветки и кампании, Fragment-конфиг,
 premium emoji helpers, brand/`{bot}`, амбассадоры (terms max, слоты), claim cooldown,
 middleware и **end-to-end** через диспетчер с фейковой Telegram-сессией (`tests/fake_telegram.py`).
 
@@ -367,9 +385,10 @@ app/
     notify.py            # доменные события → Telegram
   services/              # ledger, referrals, daily, tasks, boosts, payments, withdrawals,
                          # promo, access, audit, broadcasts, stats, antifraud, devices,
-                         # ambassadors, botohub_views, fragment, piarflow_webhook, …
-  op/                    # OpGate + адаптеры tgrass (pre-device) / piarflow (post-device)
-  web/                   # Mini App + /api/device + piarflow/tgrass webhooks
+                         # ambassadors, greetings, campaigns, botohub_views, fragment,
+                         # piarflow_webhook, tgrass_member, …
+  op/                    # OpGate: проверенный → PiarFlow, затем Tgrass; иначе только Tgrass
+  web/                   # Mini App + /api/device + piarflow/tgrass webhooks + /api/tgrass/member
   db/                    # models, session, seed, migrate
   migrations/            # Alembic env + versions (…0012_op_provider_stats)
 tests/
