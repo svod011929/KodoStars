@@ -10,6 +10,11 @@ if TYPE_CHECKING:
     from app.config import Settings
 
 
+# Admin toggle order. Imported by the gate and by traffic stats (the gate records
+# each adapter result, so stats must not import the gate module).
+CASCADE: tuple[str, ...] = ("piarflow", "tgrass")
+
+
 @dataclass(slots=True)
 class Sponsor:
     title: str

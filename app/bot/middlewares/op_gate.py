@@ -12,7 +12,6 @@ from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
-from app.services import piarflow_quality
 
 _SKIP_PREFIXES = (
     "op:",
@@ -64,7 +63,6 @@ class OpGateMiddleware(BaseMiddleware):
         )
         # Verified → PiarFlow then Tgrass; unverified → Tgrass only (no hard device gate).
         result = await self._gate.enforce(ctx, session, settings=settings, user=user)
-        await piarflow_quality.record_from_op_result(session, user.id, result)
         if not result.allowed:
             await _reply_blocked(inner, result, l1_bonus=settings.referral_l1_bonus)
             return None

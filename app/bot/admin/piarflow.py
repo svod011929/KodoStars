@@ -1,4 +1,4 @@
-"""PiarFlow traffic stats and issued/credited lists for admins."""
+"""OP traffic stats and issued/credited lists for every provider."""
 
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
@@ -23,9 +23,9 @@ async def _names(session: AsyncSession, user_ids: set[int]) -> dict[int, str]:
 
 @router.callback_query(F.data == "admin:pf:stats")
 async def pf_stats(call: CallbackQuery, session: AsyncSession) -> None:
-    traffic = await piarflow_quality.traffic_stats(session)
+    traffic = await piarflow_quality.traffic_by_provider(session)
     await safe_answer(call)
-    await safe_edit(call.message, texts.piarflow_traffic(traffic), kb.piarflow_stats())
+    await safe_edit(call.message, texts.op_traffic(traffic), kb.piarflow_stats())
 
 
 @router.callback_query(F.data.regexp(r"^admin:pf:issued:(\d+)$"))

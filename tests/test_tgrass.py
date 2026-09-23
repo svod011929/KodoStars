@@ -53,7 +53,19 @@ async def test_tgrass_contract_blocks_and_verifies(monkeypatch: pytest.MonkeyPat
                 },
             ],
         },
-        "second": {"status": "ok", "description": "subscribed to all", "offers": []},
+        "second": {
+            "status": "ok",
+            "description": "subscribed to all",
+            "offers": [
+                {
+                    "name": "Done",
+                    "link": "https://t.me/done",
+                    "subscribed": True,
+                    "type": "channel",
+                    "offer_id": 1,
+                }
+            ],
+        },
     }
     calls = {"n": 0}
 
@@ -77,10 +89,29 @@ async def test_tgrass_contract_blocks_and_verifies(monkeypatch: pytest.MonkeyPat
     assert len(blocked.sponsors) == 1
     assert blocked.sponsors[0].url == "https://t.me/cryptochannel"
     assert blocked.sponsors[0].title == "Канал"
+    assert blocked.paid_links == ["https://t.me/done"]
 
     ok = await adapter.verify(_ctx())
     assert ok.allowed is True
+    assert ok.paid_links == ["https://t.me/done"]
     assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_tgrass_not_ok_with_only_subscribed_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    def responder(url: str, body: dict, headers: dict | None):
+        return 200, {
+            "status": "not_ok",
+            "offers": [
+                {"name": "Done", "link": "https://t.me/done", "subscribed": True, "type": "channel"},
+            ],
+        }
+
+    monkeypatch.setattr(tgrass_mod, "post_json", FakeHttp(responder))
+    result = await TgrassAdapter(_settings()).check(_ctx())
+    assert result.allowed is True
+    assert result.sponsors == []
+    assert result.paid_links == ["https://t.me/done"]
 
 
 @pytest.mark.asyncio

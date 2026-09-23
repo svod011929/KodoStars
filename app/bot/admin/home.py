@@ -67,7 +67,7 @@ async def noop(call: CallbackQuery) -> None:
 async def admin_stats(call: CallbackQuery, session: AsyncSession, bot: Bot) -> None:
     data = await stats.dashboard(session)
     days = await stats.registrations_by_day(session, days=7)
-    pf = await piarflow_quality.traffic_stats(session)
+    traffic = await piarflow_quality.traffic_by_provider(session)
     star_balance: int | None = None
     try:
         amount = await bot.get_my_star_balance()
@@ -75,7 +75,7 @@ async def admin_stats(call: CallbackQuery, session: AsyncSession, bot: Bot) -> N
     except (TelegramAPIError, AttributeError):
         star_balance = None
     await safe_answer(call)
-    await safe_edit(call.message, texts.stats(data, star_balance, days, pf), kb.stats())
+    await safe_edit(call.message, texts.stats(data, star_balance, days, traffic), kb.stats())
 
 
 @router.callback_query(F.data == "admin:reconcile")

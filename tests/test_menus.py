@@ -4,6 +4,7 @@ from app.bot import keyboards as user_kb
 from app.bot.admin import keyboards as admin_kb
 from app.bot.admin import texts as admin_texts
 from app.config import Settings
+from app.services.stats import Dashboard
 
 
 def _callbacks(markup) -> set[str]:
@@ -67,3 +68,32 @@ def test_provider_screen_lists_full_webhook_urls() -> None:
     bare = admin_texts.providers_home({}, {}, Settings(web_public_url=""))
     assert "WEB_PUBLIC_URL не задан" in bare
     assert "/api/piarflow/webhook" in bare
+
+
+class _Traffic:
+    issued_total = 2
+    issued_today = 1
+    issued_7d = 2
+    shows_total = 3
+    credited_total = 1
+    credited_today = 0
+    credited_7d = 1
+    unsubs_total = 0
+    unsubs_today = 0
+    unique_users_issued = 2
+    unique_users_credited = 1
+    conversion_pct = 50.0
+
+
+def test_op_traffic_card_and_dashboard_list_every_provider() -> None:
+    blocks = [("piarflow", _Traffic()), ("tgrass", _Traffic())]
+    card = admin_texts.op_traffic(blocks)
+    assert card.startswith("📊 <b>Трафик ОП</b>")
+    assert "<b>PiarFlow</b>" in card and "<b>Tgrass</b>" in card
+    assert "Выдано спонсоров" in card and "Конверсия выдача→зачёт" in card
+    dashboard = admin_texts.stats(Dashboard(), None, [], blocks)
+    assert "📣 PiarFlow:" in dashboard
+    assert "📣 Tgrass:" in dashboard
+    labels = [btn.text for row in admin_kb.piarflow_stats().inline_keyboard for btn in row]
+    assert "ОП" in labels
+    assert "Трафик ОП" in [btn.text for row in admin_kb.stats().inline_keyboard for btn in row]
