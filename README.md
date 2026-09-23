@@ -232,9 +232,6 @@ Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — пос
 в **Каталог → Кампании**. Приветки (ротация после входа, не на стене ОП) —
 **Каталог → Приветки**.
 
-Комиссия вывода `WITHDRAW_FEE` (⭐, по умолчанию 0) списывается сверху суммы подарка
-и возвращается, если заявку отклонили или пользователь отменил её.
-
 ### Tgrass
 
 | | |
@@ -310,7 +307,7 @@ Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — пос
 ## Миграции
 
 Схема управляется Alembic (`app/migrations`). При старте бот сам приводит БД к актуальной ревизии
-(сейчас head — `0010_traffic_kit`):
+(сейчас head — `0011_drop_withdraw_fee`):
 
 - пустая БД → создаётся с нуля;
 - БД от версии 0.1 (`create_all`, без `alembic_version`) → штампуется `0001_baseline` и обновляется;
@@ -320,7 +317,9 @@ Deep-link промокода: `https://t.me/<bot>?start=promo_<CODE>` — пос
 `0006_piarflow_paid_subs` (учёт оплаченных подписок для рефералки),
 `0007_piarflow_issued_subs` (учёт выданных спонсоров для статистики),
 `0008_ambassador_slots` (амбассадоры),
-`0009_tgrass_unsubs` (Tgrass вебхук отписок).
+`0009_tgrass_unsubs` (Tgrass вебхук отписок),
+`0010_traffic_kit` (приветки и кампании),
+`0011_drop_withdraw_fee` (комиссия вывода убрана).
 
 ```bash
 alembic current
@@ -371,7 +370,7 @@ app/
   op/                    # OpGate + адаптеры tgrass (pre-device) / piarflow (post-device)
   web/                   # Mini App + /api/device + piarflow/tgrass webhooks
   db/                    # models, session, seed, migrate
-  migrations/            # Alembic env + versions (…0009_tgrass_unsubs)
+  migrations/            # Alembic env + versions (…0011_drop_withdraw_fee)
 tests/
 docs/superpowers/specs/
 CONTRIBUTORS.md

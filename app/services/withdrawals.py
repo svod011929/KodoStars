@@ -129,14 +129,12 @@ async def apply(
             minutes = int((remaining.total_seconds() % 3600) // 60)
             raise WithdrawalError(f"Кулдаун на вывод: ещё {hours} ч {minutes} мин")
 
-    if await ledger.get_balance(session, user.id) < amount + max(int(settings.withdraw_fee), 0):
+    if await ledger.get_balance(session, user.id) < amount:
         raise WithdrawalError("Недостаточно Stars на балансе")
 
-    fee = max(int(settings.withdraw_fee), 0)
     withdrawal = Withdrawal(
         user_id=user.id,
         amount=amount,
-        fee=fee,
         gift_id=gift_id,
         gift_emoji=gift_emoji,
         status=WithdrawalStatus.PENDING.value,
@@ -155,27 +153,6 @@ async def apply(
         await session.delete(withdrawal)
         await session.flush()
         raise WithdrawalError("Недостаточно Stars на балансе") from exc
-    if fee:
-        try:
-            await ledger.debit(
-                session,
-                user_id=user.id,
-                amount=fee,
-                kind=LedgerKind.WITHDRAW_FEE,
-                reference=f"wd:{withdrawal.id}:fee",
-            )
-        except InsufficientFunds as exc:
-            await ledger.credit(
-                session,
-                user_id=user.id,
-                amount=amount,
-                kind=LedgerKind.WITHDRAW_REFUND,
-                reference=f"wd:{withdrawal.id}",
-                extra={"reason": "fee_failed"},
-            )
-            await session.delete(withdrawal)
-            await session.flush()
-            raise WithdrawalError("Недостаточно Stars на балансе") from exc
     user.last_withdraw_at = datetime.now(UTC)
     detail = f"amount={amount}"
     if gift_id:
@@ -215,21 +192,36 @@ async def _refund_hold(session: AsyncSession, withdrawal: Withdrawal, *, reason:
         reference=f"wd:{withdrawal.id}",
         extra={"reason": reason},
     )
-    if withdrawal.fee <= 0:
-        return
+    await _refund_legacy_fee(session, withdrawal, reason=reason)
+
+
+async def _refund_legacy_fee(session: AsyncSession, withdrawal: Withdrawal, *, reason: str) -> None:
+    """Return a fee charged before the commission was removed."""
     fee_ref = f"wd:{withdrawal.id}:fee"
-    fee_back = await session.execute(
+    taken = await session.execute(
+        select(LedgerEntry.amount).where(
+            LedgerEntry.kind == LedgerKind.WITHDRAW_FEE.value,
+            LedgerEntry.reference == fee_ref,
+        )
+    )
+    charged = taken.scalar_one_or_none()
+    if charged is None:
+        return
+    already = await session.execute(
         select(LedgerEntry.id).where(
             LedgerEntry.kind == LedgerKind.WITHDRAW_REFUND.value,
             LedgerEntry.reference == fee_ref,
         )
     )
-    if fee_back.scalar_one_or_none() is not None:
+    if already.scalar_one_or_none() is not None:
+        return
+    amount = abs(int(charged))
+    if amount <= 0:
         return
     await ledger.credit(
         session,
         user_id=withdrawal.user_id,
-        amount=withdrawal.fee,
+        amount=amount,
         kind=LedgerKind.WITHDRAW_REFUND,
         reference=fee_ref,
         extra={"reason": reason, "fee": True},
