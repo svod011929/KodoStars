@@ -78,7 +78,7 @@ def home(version: str, pending: int, running_broadcast: bool, maintenance: bool)
 def catalog_hub() -> str:
     return (
         "📦 <b>Каталог</b>\n\n"
-        "Задания, бусты и промокоды — то, что видит пользователь в боте."
+        "Задания, бусты, промокоды, приветки и кампании закупки."
     )
 
 
@@ -431,6 +431,7 @@ def withdrawal_card(
         "",
         f"Пользователь: {name} (<code>{wd.user_id}</code>) {mention(wd.user_id, '↗')}",
         f"Сумма: <b>{h(wd.gift_label)}</b>",
+        *([f"Комиссия: {wd.fee} {STAR}"] if wd.fee else []),
         f"Создана: {fmt_dt(wd.created_at)} ({fmt_ago(wd.created_at)})",
     ]
     if wd.gift_id:

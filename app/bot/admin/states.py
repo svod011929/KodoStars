@@ -46,3 +46,6 @@ class AdminFSM(StatesGroup):
     amb_promo_max_uses = State()
     amb_reject_reason = State()
     amb_chat_id = State()
+    greeting_body = State()
+    greeting_button = State()
+    campaign_code = State()

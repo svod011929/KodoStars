@@ -1,19 +1,22 @@
 from datetime import UTC, datetime
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot import emoji as pe, keyboards, texts
+from app.bot import emoji as pe
+from app.bot import keyboards, texts
 from app.bot.render import render_home
 from app.bot.utils import safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
-from app.services import botohub_views, piarflow_quality, promo as promo_service, referrals, users
+from app.services import botohub_views, campaigns, greetings, piarflow_quality, referrals, users
+from app.services import promo as promo_service
 from app.services.antifraud import bump_activity
 from app.services.errors import EconomyError
 
@@ -97,6 +100,20 @@ async def _try_redeem_pending_promo(
     return True
 
 
+async def _send_greeting(session: AsyncSession, reply: Message | CallbackQuery) -> None:
+    greeting = await greetings.pick_greeting(session)
+    if greeting is None:
+        return
+    markup = keyboards.greeting_keyboard(greeting.button_text, greeting.button_url)
+    target = reply if isinstance(reply, Message) else reply.message
+    if target is None:
+        return
+    try:
+        await target.answer(greeting.body, reply_markup=markup)
+    except TelegramBadRequest:
+        return
+
+
 @router.message(CommandStart())
 async def cmd_start(
     message: Message,
@@ -123,6 +140,11 @@ async def cmd_start(
     await referrals.attach_referrer(
         session, user=db_user, payload=payload, settings=settings, first_start=first_start
     )
+    campaign = campaigns.parse_campaign_payload(payload)
+    if campaign:
+        await campaigns.record_hit(
+            session, code=campaign, user_id=db_user.id, is_new=first_start
+        )
     if db_user.is_banned:
         await message.answer(
             pe.premiumize(texts.banned(db_user.ban_reason or "бан", settings.support_contact))
@@ -152,6 +174,7 @@ async def cmd_start(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
     await message.answer(pe.premiumize(text) if text else text, reply_markup=markup)
+    await _send_greeting(session, message)
     if first_start:
         botohub_views.schedule_hi(db_user.id, settings)
 
@@ -197,3 +220,4 @@ async def op_verify(
         session, db_user, bot_username=bot_username, is_admin=is_admin, settings=settings
     )
     await safe_edit(call.message, home_text, home_markup)
+    await _send_greeting(session, call)

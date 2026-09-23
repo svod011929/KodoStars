@@ -11,6 +11,7 @@ from app.bot.admin import (
     piarflow,
     promo,
     settings,
+    traffic,
     users,
     withdrawals,
 )
@@ -29,6 +30,7 @@ def build_admin_router() -> Router:
         broadcast,
         catalog,
         promo,
+        traffic,
         payments,
         settings,
         piarflow,
