@@ -139,19 +139,26 @@ async def contest_view(session: AsyncSession, user: User, settings: Settings) ->
     )
 
 
-@router.callback_query(F.data.startswith("menu:top:"))
-async def menu_top(call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings) -> None:
-    mode = (call.data or "").split(":")[-1]
+async def top_view(
+    session: AsyncSession, user: User, settings: Settings, mode: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    """``mode`` is a tab: ``contest`` (falls back to ``refs`` while it is off), ``refs`` or ``earn``."""
     if mode == "contest" and settings.contest_enabled:
-        text = await contest_view(session, db_user, settings)
+        text = await contest_view(session, user, settings)
     elif mode == "earn":
         text = texts.top(await leaderboard.top_earners(session, limit=10, days=7), mode, None)
     else:
         mode = "refs"
         rows = await leaderboard.top_referrers(session, limit=10)
-        text = texts.top(rows, mode, await leaderboard.user_rank_by_referrals(session, db_user.id))
+        text = texts.top(rows, mode, await leaderboard.user_rank_by_referrals(session, user.id))
+    return text, keyboards.top_menu(mode, contest=settings.contest_enabled)
+
+
+@router.callback_query(F.data.startswith("menu:top:"))
+async def menu_top(call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings) -> None:
+    text, markup = await top_view(session, db_user, settings, (call.data or "").split(":")[-1])
     await safe_answer(call)
-    await safe_edit(call.message, text, keyboards.top_menu(mode, contest=settings.contest_enabled))
+    await safe_edit(call.message, text, markup)
 
 
 @router.callback_query(F.data == "menu:help")

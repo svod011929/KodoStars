@@ -260,6 +260,30 @@ async def test_daily_claim_flow(harness: BotHarness) -> None:
 
 
 @pytest.mark.asyncio
+async def test_shortcut_commands_open_their_screens(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, USER_ID)
+
+    def last_buttons() -> set[str]:
+        markup = [m for m in h.tg.sent(SendMessage) if m.chat_id == USER_ID][-1].reply_markup
+        return {b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data}
+
+    await h.feed(message_update(USER_ID, "/daily"))
+    assert "Ежедневная награда" in h.tg.last_text(USER_ID) and "daily:claim" in last_buttons()
+    await h.feed(message_update(USER_ID, "/ref"))
+    assert f"start=ref_{USER_ID}" in h.tg.last_text(USER_ID)
+    await h.feed(message_update(USER_ID, "/top"))
+    assert "Топ по рефералам" in h.tg.last_text(USER_ID) and "menu:top:contest" not in last_buttons()
+
+    await _start(h, ADMIN_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:set:contest_enabled:on"))
+    await h.feed(message_update(USER_ID, "/top"))
+    assert "Конкурс недели" in h.tg.last_text(USER_ID) and "menu:top:contest" in last_buttons()
+    await h.feed(message_update(USER_ID, "/help"))
+    assert "Конкурс недели" in h.tg.last_text(USER_ID) and "/daily" in h.tg.last_text(USER_ID)
+
+
+@pytest.mark.asyncio
 async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness, monkeypatch) -> None:
     h = harness
     await _start(h, ADMIN_ID)

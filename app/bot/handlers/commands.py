@@ -8,7 +8,8 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
-from app.bot.handlers.cabinet import profile_view
+from app.bot.handlers.cabinet import profile_view, referrals_view, top_view
+from app.bot.handlers.earn import daily_view
 from app.bot.render import render_home
 from app.config import Settings
 from app.db.models import User
@@ -39,6 +40,38 @@ async def cmd_profile(
 ) -> None:
     await state.clear()
     text, markup = await profile_view(session, db_user, settings)
+    await message.answer(text, reply_markup=markup)
+
+
+@router.message(Command("daily"))
+async def cmd_daily(
+    message: Message, session: AsyncSession, db_user: User, state: FSMContext, settings: Settings
+) -> None:
+    await state.clear()
+    text, markup = await daily_view(session, db_user, settings)
+    await message.answer(text, reply_markup=markup)
+
+
+@router.message(Command("ref", "invite"))
+async def cmd_ref(
+    message: Message,
+    session: AsyncSession,
+    db_user: User,
+    state: FSMContext,
+    settings: Settings,
+    bot_username: str,
+) -> None:
+    await state.clear()
+    text, markup = await referrals_view(session, db_user, settings, bot_username)
+    await message.answer(text, reply_markup=markup)
+
+
+@router.message(Command("top"))
+async def cmd_top(
+    message: Message, session: AsyncSession, db_user: User, state: FSMContext, settings: Settings
+) -> None:
+    await state.clear()
+    text, markup = await top_view(session, db_user, settings, "contest")
     await message.answer(text, reply_markup=markup)
 
 

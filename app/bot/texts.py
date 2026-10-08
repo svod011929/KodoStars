@@ -663,6 +663,14 @@ def help_text(settings: Settings, is_admin: bool) -> str:
     support = f"\n\n📨 Поддержка: {h(settings.support_contact)}" if settings.support_contact else ""
     admin = "\n\n/admin — панель администратора" if is_admin else ""
     ref_rules = "\n".join(f"  {line}" for line in referral_activation_rules(settings))
+    if settings.contest_enabled:
+        prizes = " / ".join(str(prize) for prize in settings.contest_prize_list)
+        contest_line = (
+            f"• <b>Конкурс недели</b> — больше всех активных друзей за неделю: призы {prizes} {STAR} "
+            "за места, итоги в понедельник.\n"
+        )
+    else:
+        contest_line = ""
     return (
         "❓ <b>Как это работает</b>\n\n"
         f"• <b>Ежедневка</b> — каждый день забирай {settings.daily_base_reward}+ {STAR}, "
@@ -672,11 +680,12 @@ def help_text(settings: Settings, is_admin: bool) -> str:
         f"{settings.referral_l1_percent}% с его заработка (плюс 2-й уровень).\n"
         "  Когда друг «активируется» (подробнее в меню «Рефералы»):\n"
         f"{ref_rules}\n"
+        f"{contest_line}"
         "• <b>Уровни</b> — XP за любые действия, множитель до ×2.\n"
         "• <b>Бусты</b> — множители и паки за Telegram Stars (XTR).\n"
         f"• <b>Вывод</b> — от {settings.withdraw_min} {STAR}, выбор готового подарка Telegram.\n\n"
-        "Команды: /menu — меню, /profile — профиль, /help — эта справка, "
-        "/paysupport — вопросы по оплате."
+        "Команды: /menu — меню, /daily — ежедневка, /ref — пригласить друзей, /top — топ и конкурс, "
+        "/profile — профиль, /help — эта справка, /paysupport — вопросы по оплате."
         f"{support}{admin}"
     )
 
