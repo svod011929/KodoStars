@@ -6,6 +6,7 @@ without touching Telegram.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Any
@@ -58,6 +59,61 @@ from app.bot.request_middleware import install_request_middlewares
 BOT_TOKEN = "123456789:TEST-TOKEN-FOR-TESTS"
 BOT_ID = 123456789
 BOT_USERNAME = "kodostars_test_bot"
+
+_TELEGRAM_TAGS = frozenset(
+    {
+        "a",
+        "b",
+        "blockquote",
+        "code",
+        "del",
+        "em",
+        "i",
+        "ins",
+        "pre",
+        "s",
+        "span",
+        "strike",
+        "strong",
+        "tg-emoji",
+        "tg-spoiler",
+        "u",
+    }
+)
+_TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)([^<>]*)>")
+
+# Messages any fake session refused the way Telegram would; conftest fails the test on them.
+rejected_html: list[str] = []
+
+
+def telegram_html_error(text: str) -> str | None:
+    """Why the Bot API would refuse ``text`` with ``parse_mode=HTML``, or ``None``.
+
+    Mirrors Telegram's parser: every ``<`` must open a supported tag, tags must nest,
+    ``tg-emoji`` needs an ``emoji-id``. A stray ``>`` or ``&`` is taken literally.
+    """
+    open_tags: list[str] = []
+    pos = 0
+    for match in _TAG.finditer(text):
+        if "<" in text[pos : match.start()]:
+            return "unescaped '<'"
+        pos = match.end()
+        closing, name, attrs = match.group(1), match.group(2).lower(), match.group(3)
+        if name not in _TELEGRAM_TAGS:
+            return f"unsupported tag <{name}>"
+        if closing:
+            if not open_tags or open_tags.pop() != name:
+                return f"unmatched </{name}>"
+        elif name == "tg-emoji" and "emoji-id=" not in attrs:
+            return "tg-emoji without emoji-id"
+        else:
+            open_tags.append(name)
+    if "<" in text[pos:]:
+        return "unescaped '<'"
+    if open_tags:
+        return f"unclosed <{open_tags[-1]}>"
+    return None
+
 
 # Fixed catalog so e2e withdraw tests do not depend on live Telegram.
 TEST_GIFTS: list[Gift] = [
@@ -160,6 +216,11 @@ class FakeSession(BaseSession):
         timeout: int | None = None,  # noqa: ASYNC109 - signature dictated by aiogram BaseSession
     ) -> Any:
         self.requests.append(method)
+        if isinstance(method, (SendMessage, EditMessageText)) and method.parse_mode is not None:
+            error = telegram_html_error(method.text)
+            if error is not None:
+                rejected_html.append(f"{error}: {method.text!r}")
+                raise TelegramBadRequest(method=method, message=f"Bad Request: can't parse entities: {error}")
         return self._respond(method)
 
     def _message(self, chat_id: int | str, text: str | None = None, message_id: int | None = None) -> Message:

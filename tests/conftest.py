@@ -1,5 +1,5 @@
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,11 +21,20 @@ from app.services import gifts as gifts_service
 from app.services.access import AccessRegistry
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.broadcasts import BroadcastRunner
+from tests import fake_telegram
 from tests.fake_telegram import BOT_USERNAME, FakeSession, make_bot
 
 ADMIN_ID = 1
 USER_ID = 42
 OTHER_ID = 43
+
+
+@pytest.fixture(autouse=True)
+def _telegram_accepts_every_message() -> Iterator[None]:
+    rejected = fake_telegram.rejected_html
+    rejected.clear()
+    yield
+    assert not rejected, "Telegram would reject:\n" + "\n".join(rejected)
 
 
 @pytest.fixture
