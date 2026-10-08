@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 from typing import Any
 
 import pytest
@@ -109,3 +111,66 @@ async def test_ad_payload_hi_false(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(botohub_views.op_http, "post_json", fake_post)
     assert await botohub_views.maybe_send_ad(3, _settings()) is True
     assert seen["json"]["hi"] is False
+
+
+@pytest.mark.asyncio
+async def test_scheduled_task_is_kept_alive_until_done(monkeypatch: pytest.MonkeyPatch) -> None:
+    release = asyncio.Event()
+
+    async def fake_post(*_a: Any, **_k: Any) -> tuple[int, dict]:
+        await release.wait()
+        return 200, {"SendPostResult": 1}
+
+    monkeypatch.setattr(botohub_views.op_http, "post_json", fake_post)
+    botohub_views.schedule_ad(5, _settings())
+    await asyncio.sleep(0)
+    pending = [task for task in botohub_views._background if task.get_name() == "botohub-ad-5"]
+    assert len(pending) == 1
+    release.set()
+    await pending[0]
+    assert pending[0] not in botohub_views._background
+
+
+def test_spawn_without_loop_closes_coroutine() -> None:
+    async def never() -> None:
+        return None
+
+    coro = never()
+    botohub_views._spawn(coro, name="no-loop")
+    assert inspect.getcoroutinestate(coro) == inspect.CORO_CLOSED
+
+
+@pytest.mark.asyncio
+async def test_concurrent_ads_for_one_user_send_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+    release = asyncio.Event()
+
+    async def fake_post(*_a: Any, **_k: Any) -> tuple[int, dict]:
+        nonlocal calls
+        calls += 1
+        await release.wait()
+        return 200, {"SendPostResult": 1}
+
+    monkeypatch.setattr(botohub_views.op_http, "post_json", fake_post)
+    settings = _settings()
+    first = asyncio.create_task(botohub_views.maybe_send_ad(11, settings))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(botohub_views.maybe_send_ad(11, settings))
+    await asyncio.sleep(0)
+    release.set()
+    results = await asyncio.wait_for(asyncio.gather(first, second), timeout=2)
+    assert sorted(results) == [False, True]
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_ad_releases_the_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    results = iter([{"SendPostResult": 8}, {"SendPostResult": 1}])
+
+    async def fake_post(*_a: Any, **_k: Any) -> tuple[int, dict]:
+        return 200, next(results)
+
+    monkeypatch.setattr(botohub_views.op_http, "post_json", fake_post)
+    settings = _settings()
+    assert await botohub_views.maybe_send_ad(12, settings) is False
+    assert await botohub_views.maybe_send_ad(12, settings) is True
