@@ -10,6 +10,7 @@ from aiogram.enums import ChatMemberStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import texts
 from app.bot.handlers.cabinet import referrals_view
 from app.bot.render import render_home
 from app.config import Settings
@@ -221,7 +222,14 @@ async def test_screens_advertise_ambassador_terms(session: AsyncSession, setting
     body, markup = await referrals_view(session, user, settings, "bot")
     assert "За друга (L1): <b>42" in body and "<b>31%</b>" in body
     assert "<b>7" in body and "<b>9%</b>" in body
-    assert "42" in unquote(markup.inline_keyboard[0][0].url)
+    # Friends earn the global terms for their own invites, so that is what they are promised.
+    share = unquote(markup.inline_keyboard[0][0].url)
+    assert "10 ⭐ за каждого друга" in share and "42" not in share
+
+    help_text = texts.help_text(
+        settings, False, terms=await amb.effective_referral_terms(session, user.id, settings)
+    )
+    assert "<b>Рефералы</b> — 42 " in help_text and "31% с его заработка" in help_text
 
 
 @pytest.mark.asyncio

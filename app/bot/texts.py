@@ -668,7 +668,7 @@ def banned_short() -> str:
     return "Доступ закрыт"
 
 
-def help_text(settings: Settings, is_admin: bool) -> str:
+def help_text(settings: Settings, is_admin: bool, *, terms: ReferralTerms) -> str:
     support = f"\n\n📨 Поддержка: {h(settings.support_contact)}" if settings.support_contact else ""
     admin = "\n\n/admin — панель администратора" if is_admin else ""
     ref_rules = "\n".join(f"  {line}" for line in referral_activation_rules(settings))
@@ -685,8 +685,8 @@ def help_text(settings: Settings, is_admin: bool) -> str:
         f"• <b>Ежедневка</b> — каждый день забирай {settings.daily_base_reward}+ {STAR}, "
         "серия увеличивает награду.\n"
         "• <b>Задания</b> — подписки, приглашения, серии. Награда × уровень × буст.\n"
-        f"• <b>Рефералы</b> — {settings.referral_l1_bonus} {STAR} за активного друга и "
-        f"{settings.referral_l1_percent}% с его заработка (плюс 2-й уровень).\n"
+        f"• <b>Рефералы</b> — {terms.l1_bonus} {STAR} за активного друга и "
+        f"{terms.l1_percent}% с его заработка (плюс 2-й уровень).\n"
         "  Когда друг «активируется» (подробнее в меню «Рефералы»):\n"
         f"{ref_rules}\n"
         f"{contest_line}"

@@ -109,7 +109,8 @@ async def referrals_view(
     text = texts.referrals(
         user, link, stats, activated, earned, rank, settings, recent, terms=terms, contest_line=contest_line
     )
-    share = texts.share_text(link, settings.signup_bonus, terms.l1_bonus)
+    # The friend is pitched what they would earn: the global terms, not the ambassador's.
+    share = texts.share_text(link, settings.signup_bonus, settings.referral_l1_bonus)
     return text, keyboards.referrals_menu(link, share, contest=contest is not None)
 
 
@@ -154,10 +155,15 @@ async def menu_top(call: CallbackQuery, session: AsyncSession, db_user: User, se
 
 
 @router.callback_query(F.data == "menu:help")
-async def menu_help(call: CallbackQuery, settings: Settings, is_admin: bool) -> None:
+async def menu_help(
+    call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings, is_admin: bool
+) -> None:
+    terms = await ambassadors.effective_referral_terms(session, db_user.id, settings)
     await safe_answer(call)
     await safe_edit(
-        call.message, texts.help_text(settings, is_admin), keyboards.help_menu(settings.support_contact)
+        call.message,
+        texts.help_text(settings, is_admin, terms=terms),
+        keyboards.help_menu(settings.support_contact),
     )
 
 

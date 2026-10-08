@@ -13,6 +13,7 @@ from app.bot.handlers.earn import daily_view
 from app.bot.render import render_home
 from app.config import Settings
 from app.db.models import User
+from app.services import ambassadors
 
 router = Router(name="commands")
 
@@ -76,10 +77,19 @@ async def cmd_top(
 
 
 @router.message(Command("help"))
-async def cmd_help(message: Message, settings: Settings, is_admin: bool, state: FSMContext) -> None:
+async def cmd_help(
+    message: Message,
+    session: AsyncSession,
+    db_user: User,
+    settings: Settings,
+    is_admin: bool,
+    state: FSMContext,
+) -> None:
     await state.clear()
+    terms = await ambassadors.effective_referral_terms(session, db_user.id, settings)
     await message.answer(
-        texts.help_text(settings, is_admin), reply_markup=keyboards.help_menu(settings.support_contact)
+        texts.help_text(settings, is_admin, terms=terms),
+        reply_markup=keyboards.help_menu(settings.support_contact),
     )
 
 
