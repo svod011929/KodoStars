@@ -413,7 +413,7 @@ def top(
         rows = rows_earn
         unit = STAR
     else:
-        title = "🏆 <b>Топ по рефералам</b>"
+        title = "🏆 <b>Топ по рефералам</b>\n<i>Считаются только активные друзья.</i>"
         rows = rows_refs
         unit = "реф."
     lines = [title, ""]
