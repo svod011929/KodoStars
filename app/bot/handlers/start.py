@@ -133,8 +133,13 @@ async def cmd_start(
         await state.update_data(pending_promo=promo_code)
 
     first_start = users.mark_started(db_user)
+    ref_payload = payload
+    if promo_code and first_start:
+        ambassador_id = await ambassadors.promo_referrer(session, promo_code)
+        if ambassador_id is not None:
+            ref_payload = referrals.ref_payload(ambassador_id)
     await referrals.attach_referrer(
-        session, user=db_user, payload=payload, settings=settings, first_start=first_start
+        session, user=db_user, payload=ref_payload, settings=settings, first_start=first_start
     )
     campaign = campaigns.parse_campaign_payload(payload)
     if campaign:

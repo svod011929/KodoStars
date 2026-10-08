@@ -7,6 +7,7 @@ from urllib.parse import unquote
 
 import pytest
 from aiogram.enums import ChatMemberStatus
+from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -252,7 +253,6 @@ async def test_publish_promo_requires_admin(session: AsyncSession, settings: Set
         promo_max_uses=10,
     )
     await amb.set_chat_id(session, slot.id, -1001)
-    promo = await amb.claim_daily_promo(session, slot_id=slot.id, user_id=10)
 
     bot = MagicMock()
     bot.get_me = AsyncMock(return_value=MagicMock(id=999))
@@ -260,11 +260,12 @@ async def test_publish_promo_requires_admin(session: AsyncSession, settings: Set
     member.status = ChatMemberStatus.MEMBER
     bot.get_chat_member = AsyncMock(return_value=member)
     bot.send_message = AsyncMock()
+    post = {"text": "promo", "reply_markup": InlineKeyboardMarkup(inline_keyboard=[])}
 
     with pytest.raises(ValidationError):
-        await amb.publish_promo(bot, slot, promo)
+        await amb.publish_promo(bot, slot, **post)
     bot.send_message.assert_not_called()
 
     member.status = ChatMemberStatus.ADMINISTRATOR
-    await amb.publish_promo(bot, slot, promo)
-    bot.send_message.assert_awaited()
+    await amb.publish_promo(bot, slot, **post)
+    bot.send_message.assert_awaited_once_with(-1001, "promo", reply_markup=post["reply_markup"])

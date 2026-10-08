@@ -289,6 +289,10 @@ def ambassador_kind_pick() -> InlineKeyboardMarkup:
     )
 
 
+def ambassador_promo_post(link: str) -> InlineKeyboardMarkup:
+    return markup([url_button("Активировать", link, icon="gift")])
+
+
 def ambassador_slot_card(slot, *, today_code: str | None = None) -> InlineKeyboardMarkup:
     rows = []
     if slot.status == AmbassadorStatus.APPROVED.value:

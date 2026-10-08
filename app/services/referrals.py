@@ -24,8 +24,12 @@ def parse_ref_payload(payload: str | None) -> int | None:
     return None
 
 
+def ref_payload(user_id: int) -> str:
+    return f"ref_{user_id}"
+
+
 def referral_link(bot_username: str, user_id: int) -> str:
-    return f"https://t.me/{bot_username}?start=ref_{user_id}"
+    return f"https://t.me/{bot_username}?start={ref_payload(user_id)}"
 
 
 async def attach_referrer(

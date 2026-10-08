@@ -21,6 +21,7 @@ from app.config import RUNTIME_OVERRIDABLE, SETTINGS_GROUPS
 from app.db.models import (
     Broadcast,
     BroadcastStatus,
+    FraudEvent,
     LedgerKind,
     ReferralEdge,
     User,
@@ -29,10 +30,12 @@ from app.db.models import (
 )
 from app.op.base import OpResult, Sponsor
 from app.op.tgrass import TgrassAdapter
-from app.services import devices, ledger, payments, promo, referrals
+from app.services import ambassadors, devices, ledger, payments, promo, referrals
 from app.services.fragment import FragmentPurchase
 from tests.conftest import ADMIN_ID, OTHER_ID, USER_ID, BotHarness
 from tests.fake_telegram import (
+    BOT_ID,
+    BOT_USERNAME,
     callback_update,
     message_update,
     pre_checkout_update,
@@ -184,6 +187,53 @@ async def test_group_chat_traffic_is_ignored(harness: BotHarness) -> None:
     await _start(h, USER_ID, f"ref_{ADMIN_ID}")
     async with h.factory() as session:
         assert (await session.get(User, USER_ID)).referred_by_id == ADMIN_ID
+
+
+@pytest.mark.asyncio
+async def test_ambassador_promo_link_brings_referrals(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, ADMIN_ID)
+    await _start(h, USER_ID)
+    channel = -100777
+    async with h.factory() as session:
+        slot = await ambassadors.submit_application(
+            session,
+            user=await session.get(User, USER_ID),
+            kind="channel",
+            title="Канал",
+            invite_link="https://t.me/amb_channel",
+        )
+        await ambassadors.approve_slot(
+            session,
+            slot_id=slot.id,
+            admin_id=ADMIN_ID,
+            l1_bonus=40,
+            l1_percent=20,
+            l2_bonus=0,
+            l2_percent=0,
+            promo_reward=7,
+            promo_max_uses=0,
+        )
+        await ambassadors.set_chat_id(session, slot.id, channel)
+        slot.promo_auto_post = True
+        slot_id = slot.id
+        await session.commit()
+    h.tg.member_status[(str(channel), BOT_ID)] = "administrator"
+
+    await h.feed(callback_update(USER_ID, f"amb:claim:{slot_id}"))
+    post = [m for m in h.tg.sent(SendMessage) if m.chat_id == channel][-1]
+    link = post.reply_markup.inline_keyboard[0][0].url
+    assert link.startswith(f"https://t.me/{BOT_USERNAME}?start=promo_AMB")
+    assert link in h.tg.last_text(USER_ID)
+
+    await h.feed(message_update(OTHER_ID, f"/start {link.split('start=')[1]}"))
+    await h.feed(message_update(ADMIN_ID, f"/start {link.split('start=')[1]}"))
+    assert await _balance(h, OTHER_ID) == 5 + 7
+    assert any("новый друг" in text for text in h.tg.texts(USER_ID))
+    async with h.factory() as session:
+        assert (await session.get(User, OTHER_ID)).referred_by_id == USER_ID
+        assert (await session.get(User, ADMIN_ID)).referred_by_id is None
+        assert not (await session.scalars(select(FraudEvent))).all()
 
 
 @pytest.mark.asyncio

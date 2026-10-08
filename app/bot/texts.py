@@ -776,7 +776,8 @@ def ambassador_hub(slots_count: int) -> str:
     return (
         f"🤝 <b>Амбассадор {BOT}</b>\n\n"
         "Подключите канал, чат или бота — после одобрения получите особые реф-условия "
-        "и ежедневные промокоды.\n"
+        "и ежедневные промокоды. Новички, которые откроют бота по ссылке вашего промокода, "
+        "станут вашими рефералами.\n"
         f"Ваших заявок: <b>{slots_count}</b>."
     )
 
@@ -801,7 +802,7 @@ def ambassador_submitted(title: str) -> str:
     return f"✅ Заявка «{h(title)}» отправлена.\nАдминистратор проверит её и назначит условия."
 
 
-def ambassador_slot_text(slot, today_code: str | None = None) -> str:
+def ambassador_slot_text(slot, today_code: str | None = None, today_link: str | None = None) -> str:
     kind = AMBASSADOR_KIND_LABELS.get(slot.kind, slot.kind)
     status = AMBASSADOR_STATUS_LABELS.get(slot.status, slot.status)
     lines = [
@@ -819,12 +820,28 @@ def ambassador_slot_text(slot, today_code: str | None = None) -> str:
         ]
         if today_code:
             lines += ["", f"Промокод на сегодня: <code>{h(today_code)}</code>"]
+            if today_link:
+                lines.append(f"Ссылка для активации: <code>{h(today_link)}</code>")
     elif slot.status == AmbassadorStatus.REJECTED.value and slot.reject_reason:
         lines += ["", f"Причина: {h(slot.reject_reason)}"]
     return "\n".join(lines)
 
 
-def ambassador_promo_ready(code: str, reward: int, max_uses: int, posted: bool) -> str:
+def ambassador_promo_ready(code: str, reward: int, max_uses: int, posted: bool, link: str) -> str:
     limit = "без лимита" if max_uses == 0 else f"до {max_uses} акт."
     post = "\n📣 Опубликовано в канал/чат." if posted else ""
-    return f"🎟 Промокод на сегодня: <code>{h(code)}</code>\nНаграда: <b>{reward} {STAR}</b> · {limit}.{post}"
+    return (
+        f"🎟 Промокод на сегодня: <code>{h(code)}</code>\n"
+        f"Награда: <b>{reward} {STAR}</b> · {limit}.{post}\n\n"
+        f"Ссылка для активации:\n<code>{h(link)}</code>\n"
+        "Новички, которые откроют бота по ней, станут вашими рефералами."
+    )
+
+
+def ambassador_promo_post(code: str, reward: int, max_uses: int) -> str:
+    limit = f" · до {max_uses} активаций" if max_uses else ""
+    return (
+        f"🎟 Промокод <b>{h(code)}</b>\n"
+        f"Награда: <b>{reward} {STAR}</b>{limit}\n"
+        "Жми «Активировать» — бот откроется и начислит награду."
+    )
