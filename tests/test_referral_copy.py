@@ -43,7 +43,7 @@ def test_referral_screen_has_sections() -> None:
         recent=[],
     )
     assert "Когда друг считается активным" in body
-    assert "Что ты получаешь" in body
+    assert "Что ещё капает" in body
     assert "ещё не активирован" in body
 
 
