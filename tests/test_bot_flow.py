@@ -12,6 +12,7 @@ from aiogram.methods import (
     SendInvoice,
     SendMessage,
 )
+from aiogram.types import User as TgUser
 from sqlalchemy import select
 
 from app.bot import brand
@@ -61,6 +62,7 @@ async def test_start_creates_user_credits_signup_and_shows_home(harness: BotHarn
     home = h.tg.last_text(USER_ID)
     assert "KodoStars" in home
     assert f"start=ref_{USER_ID}" in home
+    assert f"До вывода: ▰▱▱▱▱▱▱▱▱▱ {h.settings.signup_bonus}/{h.settings.withdraw_min}" in home
     assert await _balance(h, USER_ID) == h.settings.signup_bonus
     async with h.factory() as session:
         user = await session.get(User, USER_ID)
@@ -346,6 +348,38 @@ async def test_withdraw_gift_reject_with_reason(harness: BotHarness) -> None:
     assert await _balance(h, USER_ID) == 205
     user_note = h.tg.last_text(USER_ID)
     assert "отклонена" in user_note and "накрутку" in user_note
+
+
+@pytest.mark.asyncio
+async def test_withdraw_screen_explains_blockers_before_picking(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, USER_ID)
+    async with h.factory() as session:
+        await ledger.credit(session, user_id=USER_ID, amount=100, kind=LedgerKind.TASK)
+        await session.commit()
+
+    def gift_buttons() -> list[str]:
+        markup = [m for m in h.tg.sent(EditMessageText) if m.chat_id == USER_ID][-1].reply_markup
+        return [b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data]
+
+    no_username = TgUser(id=USER_ID, is_bot=False, first_name="Daniel")
+    await h.feed(callback_update(USER_ID, "menu:withdraw", user=no_username))
+    assert "нужен публичный @username" in h.tg.last_text(USER_ID)
+    assert not any(data.startswith("wd:g:") for data in gift_buttons())
+
+    h.settings.withdraw_min_referrals = 2
+    try:
+        await h.feed(callback_update(USER_ID, "menu:withdraw"))
+        assert "активных рефералов (сейчас 0)" in h.tg.last_text(USER_ID)
+        assert not any(data.startswith("wd:g:") for data in gift_buttons())
+    finally:
+        h.settings.withdraw_min_referrals = 0
+
+    await h.feed(callback_update(USER_ID, "menu:withdraw"))
+    assert "Выберите готовый подарок" in h.tg.last_text(USER_ID)
+    assert "wd:g:g50" in gift_buttons()
+    await h.feed(message_update(USER_ID, "/menu"))
+    assert "Вывод доступен" in h.tg.last_text(USER_ID)
 
 
 @pytest.mark.asyncio

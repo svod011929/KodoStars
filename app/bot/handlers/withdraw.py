@@ -40,11 +40,14 @@ async def _home_view(
     held = await withdrawals.held_total(session, user.id)
     open_request = await withdrawals.open_withdrawal(session, user.id)
     device_url = device_url_for(user, settings) if settings.device_check_for_withdraw else None
+    blocker = await withdrawals.blocker(session, user=user, settings=settings)
     offers: list[GiftOffer] = []
     catalog_error = False
-    can_pick = settings.withdraw_enabled and not user.is_banned and open_request is None and not device_url
+    can_pick = blocker is None and not user.is_banned
     if can_pick:
         offers, catalog_error = await _load_offers(bot, user, settings, balance)
+    # Pause, open request and device check already have their own line or button.
+    shown_elsewhere = not settings.withdraw_enabled or open_request is not None or device_url is not None
     text = texts.withdraw_home(
         balance,
         held,
@@ -53,6 +56,7 @@ async def _home_view(
         offers_count=len(offers),
         catalog_error=catalog_error,
         can_pick=can_pick,
+        blocker=None if shown_elsewhere else blocker,
     )
     if device_url:
         text += "\n\n" + texts.device_notice(for_withdraw=True)

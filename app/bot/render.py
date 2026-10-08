@@ -54,5 +54,6 @@ async def render_home(
         referral_link(bot_username, user.id),
         device_notice=notice,
         l1_bonus=terms.l1_bonus,
+        withdraw_min=settings.withdraw_min if settings.withdraw_enabled else 0,
     )
     return text, keyboards.main_menu(is_admin, device_url=device_url, l1_bonus=terms.l1_bonus)

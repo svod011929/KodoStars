@@ -269,7 +269,7 @@ def forwarded_channel_post_update(
     return Update(update_id=_next_update_id(), message=message)
 
 
-def callback_update(user_id: int, data: str, *, message_id: int = 1) -> Update:
+def callback_update(user_id: int, data: str, *, message_id: int = 1, user: TgUser | None = None) -> Update:
     message = Message(
         message_id=message_id,
         date=datetime.now(UTC),
@@ -279,7 +279,7 @@ def callback_update(user_id: int, data: str, *, message_id: int = 1) -> Update:
     )
     query = CallbackQuery(
         id=f"cb{_next_update_id()}",
-        from_user=tg_user(user_id),
+        from_user=user or tg_user(user_id),
         chat_instance="ci",
         data=data,
         message=message,

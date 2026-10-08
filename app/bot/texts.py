@@ -69,6 +69,7 @@ def home(
     link: str,
     device_notice: str = "",
     l1_bonus: int = 0,
+    withdraw_min: int = 0,
 ) -> str:
     if level.next_xp is not None:
         level_line = (
@@ -77,6 +78,14 @@ def home(
     else:
         level_line = f"🏅 Уровень {level.level} — максимальный"
     hold = f" · в холде {held} {STAR}" if held else ""
+    if withdraw_min <= 0:
+        payout_line = ""
+    elif balance < withdraw_min:
+        payout_line = (
+            f"💸 До вывода: {progress_bar(balance / withdraw_min)} {max(balance, 0)}/{withdraw_min} {STAR}\n"
+        )
+    else:
+        payout_line = "💸 Вывод доступен — жми «Вывод»\n"
     boost = format_multiplier(boost_bp)
     boost_line = f"✨ Множитель {format_multiplier(level.multiplier_bp)}"
     if boost_bp > 100:
@@ -94,6 +103,7 @@ def home(
         f"{STAR} <b>{BOT}</b>\n"
         f"{hook}"
         f"Баланс: <b>{balance} {STAR}</b>{hold}\n"
+        f"{payout_line}"
         f"{level_line}\n"
         f"{boost_line} · серия {current_streak(user)} дн.\n\n"
         f"Твоя ссылка:\n<code>{h(link)}</code>"
@@ -436,6 +446,7 @@ def withdraw_home(
     offers_count: int = 0,
     catalog_error: bool = False,
     can_pick: bool = True,
+    blocker: str | None = None,
 ) -> str:
     lines = [
         "💸 <b>Вывод Stars</b>",
@@ -458,6 +469,8 @@ def withdraw_home(
             f"Открытая заявка #{open_request.id}: <b>{h(open_request.gift_label)}</b> — "
             f"{WITHDRAWAL_STATUS_LABELS.get(open_request.status, open_request.status)}.",
         ]
+    elif blocker:
+        lines += ["", f"⚠️ {h(blocker)}"]
     elif can_pick and catalog_error:
         lines += ["", "⚠️ Не удалось загрузить каталог подарков Telegram. Попробуйте обновить."]
     elif can_pick and balance < settings.withdraw_min:
