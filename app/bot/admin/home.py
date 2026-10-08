@@ -22,9 +22,7 @@ async def _home_view(session: AsyncSession, settings: Settings) -> tuple[str, ob
     pending = await withdrawals.count_queue(session)
     amb_pending = await amb_service.count_pending(session)
     running = await running_broadcast(session) is not None
-    return texts.home(__version__, pending, running, settings.maintenance_mode), kb.home(
-        pending, amb_pending
-    )
+    return texts.home(__version__, pending, running, settings.maintenance_mode), kb.home(pending, amb_pending)
 
 
 @router.message(Command("admin"))

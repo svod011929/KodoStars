@@ -231,11 +231,7 @@ async def test_tgrass_member_checks_api_key(web: Harness) -> None:
         session.add(User(id=11, first_name="Passed", last_op_ok_at=datetime.now(UTC)))
         await session.commit()
 
-    wrong = await web.client.get(
-        "/api/tgrass/member", params={"telegram_id": "11", "api_key": "nope"}
-    )
-    right = await web.client.get(
-        "/api/tgrass/member", params={"telegram_id": "11", "api_key": "secret"}
-    )
+    wrong = await web.client.get("/api/tgrass/member", params={"telegram_id": "11", "api_key": "nope"})
+    right = await web.client.get("/api/tgrass/member", params={"telegram_id": "11", "api_key": "secret"})
     assert (await wrong.json())["is_member"] is False
     assert (await right.json())["is_member"] is True

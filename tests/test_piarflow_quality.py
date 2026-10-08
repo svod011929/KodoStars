@@ -109,12 +109,8 @@ async def test_list_recent_issued_and_credited(session) -> None:
 async def test_stats_split_by_provider(session) -> None:
     await _user(session, 30)
     await _user(session, 31)
-    await piarflow_quality.record_issued_sponsors(
-        session, 30, ["https://t.me/shared"], provider="piarflow"
-    )
-    await piarflow_quality.record_issued_sponsors(
-        session, 30, ["https://t.me/shared"], provider="tgrass"
-    )
+    await piarflow_quality.record_issued_sponsors(session, 30, ["https://t.me/shared"], provider="piarflow")
+    await piarflow_quality.record_issued_sponsors(session, 30, ["https://t.me/shared"], provider="tgrass")
     await piarflow_quality.record_paid_subs(session, 30, ["https://t.me/pf"], provider="piarflow")
     await piarflow_quality.record_paid_subs(session, 31, ["https://t.me/tg"], provider="tgrass")
     session.add_all(

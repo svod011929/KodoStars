@@ -46,7 +46,9 @@ class Notifier:
 
     async def _send(self, chat_id: int, text: str, **kwargs: Any) -> None:
         try:
-            await self._bot.send_message(chat_id, pe.premiumize(text), disable_web_page_preview=True, **kwargs)
+            await self._bot.send_message(
+                chat_id, pe.premiumize(text), disable_web_page_preview=True, **kwargs
+            )
         except TelegramAPIError as exc:
             log.info("notify_send_failed", chat_id=chat_id, error=str(exc))
 

@@ -9,7 +9,9 @@ from app.services.errors import ValidationError
 @pytest.mark.asyncio
 async def test_greetings_rotate_least_shown(session) -> None:
     first = await greetings.create_greeting(session, body="one")
-    second = await greetings.create_greeting(session, body="two", button_text="Go", button_url="https://t.me/x")
+    second = await greetings.create_greeting(
+        session, body="two", button_text="Go", button_url="https://t.me/x"
+    )
     picked = await greetings.pick_greeting(session)
     assert picked is not None and picked.id == first.id and picked.shows == 1
     picked = await greetings.pick_greeting(session)

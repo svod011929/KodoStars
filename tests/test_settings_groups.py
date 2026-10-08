@@ -17,8 +17,7 @@ def test_settings_groups_partition_runtime_keys() -> None:
 
     assert len(grouped) == len(set(grouped)), "duplicate key across settings groups"
     assert set(grouped) == set(RUNTIME_OVERRIDABLE), (
-        f"missing={set(RUNTIME_OVERRIDABLE) - set(grouped)} "
-        f"extra={set(grouped) - set(RUNTIME_OVERRIDABLE)}"
+        f"missing={set(RUNTIME_OVERRIDABLE) - set(grouped)} extra={set(grouped) - set(RUNTIME_OVERRIDABLE)}"
     )
 
 

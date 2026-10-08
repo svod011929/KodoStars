@@ -104,10 +104,7 @@ def device_notice(for_withdraw: bool) -> str:
     if for_withdraw:
         bits.append("недоступен вывод")
     bits.append("не выдаются задания ОП")
-    return (
-        "🛡 <b>Подтвердите устройство</b> — одна кнопка, две секунды. "
-        f"Без этого {', '.join(bits)}."
-    )
+    return f"🛡 <b>Подтвердите устройство</b> — одна кнопка, две секунды. Без этого {', '.join(bits)}."
 
 
 def device_twink_notice() -> str:
@@ -499,10 +496,7 @@ def withdraw_status_update(wd: Withdrawal, status: str, note: str) -> str:
         return f"💸 Заявка #{wd.id}: подарок <b>{h(wd.gift_label)}</b> отправлен. Спасибо, что с нами!"
     if status == "rejected":
         reason = f"\nПричина: {h(note)}" if note else ""
-        return (
-            f"🔴 Заявка #{wd.id} на {h(wd.gift_label)} отклонена. "
-            f"Stars возвращены на баланс.{reason}"
-        )
+        return f"🔴 Заявка #{wd.id} на {h(wd.gift_label)} отклонена. Stars возвращены на баланс.{reason}"
     return f"Заявка #{wd.id}: статус — {WITHDRAWAL_STATUS_LABELS.get(status, status)}."
 
 
@@ -516,11 +510,7 @@ def promo_ok(promo: PromoCode, amount: int) -> str:
 
 def op_blocked(provider: str, extra: str = "", l1_bonus: int = 0) -> str:
     tail = f"\n\n{h(extra)}" if extra else ""
-    hook = (
-        f"Дальше откроется бот: <b>{l1_bonus} {STAR}</b> за каждого друга.\n\n"
-        if l1_bonus > 0
-        else ""
-    )
+    hook = f"Дальше откроется бот: <b>{l1_bonus} {STAR}</b> за каждого друга.\n\n" if l1_bonus > 0 else ""
     return (
         "🔒 <b>Один шаг — и доступ открыт</b>\n\n"
         f"{hook}"
@@ -656,10 +646,7 @@ def ambassador_ask_title() -> str:
 
 
 def ambassador_submitted(title: str) -> str:
-    return (
-        f"✅ Заявка «{h(title)}» отправлена.\n"
-        "Администратор проверит её и назначит условия."
-    )
+    return f"✅ Заявка «{h(title)}» отправлена.\nАдминистратор проверит её и назначит условия."
 
 
 def ambassador_slot_text(slot, today_code: str | None = None) -> str:
@@ -688,7 +675,4 @@ def ambassador_slot_text(slot, today_code: str | None = None) -> str:
 def ambassador_promo_ready(code: str, reward: int, max_uses: int, posted: bool) -> str:
     limit = "без лимита" if max_uses == 0 else f"до {max_uses} акт."
     post = "\n📣 Опубликовано в канал/чат." if posted else ""
-    return (
-        f"🎟 Промокод на сегодня: <code>{h(code)}</code>\n"
-        f"Награда: <b>{reward} {STAR}</b> · {limit}.{post}"
-    )
+    return f"🎟 Промокод на сегодня: <code>{h(code)}</code>\nНаграда: <b>{reward} {STAR}</b> · {limit}.{post}"

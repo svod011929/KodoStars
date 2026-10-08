@@ -53,7 +53,14 @@ def test_catalog_and_system_hubs() -> None:
     assert {"admin:tasks", "admin:boosts", "admin:promo:list:0", "admin:home"} <= catalog
 
     system = _callbacks(admin_kb.system_hub())
-    assert {"admin:pay:0", "admin:adm", "admin:audit:0", "admin:fraud:0", "admin:data", "admin:home"} <= system
+    assert {
+        "admin:pay:0",
+        "admin:adm",
+        "admin:audit:0",
+        "admin:fraud:0",
+        "admin:data",
+        "admin:home",
+    } <= system
 
 
 def test_provider_screen_lists_full_webhook_urls() -> None:

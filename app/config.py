@@ -168,9 +168,7 @@ SETTINGS_GROUP_ICONS: dict[str, str] = {
     "system": "admin",
 }
 
-_SETTING_TO_GROUP: dict[str, str] = {
-    key: group for group, keys in SETTINGS_GROUPS.items() for key in keys
-}
+_SETTING_TO_GROUP: dict[str, str] = {key: group for group, keys in SETTINGS_GROUPS.items() for key in keys}
 
 
 def setting_group(key: str) -> str | None:

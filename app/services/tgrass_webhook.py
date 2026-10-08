@@ -87,9 +87,7 @@ async def _handle_unsub(
         )
     )
     if existing.scalar_one_or_none() is not None:
-        return TgrassWebhookResult(
-            kind="unsub", processed=False, duplicate=True, user_id=tg_user_id
-        )
+        return TgrassWebhookResult(kind="unsub", processed=False, duplicate=True, user_id=tg_user_id)
 
     row = TgrassUnsub(tg_user_id=tg_user_id, offer_link=offer_link, penalty=0)
     session.add(row)

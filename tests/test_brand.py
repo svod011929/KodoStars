@@ -52,11 +52,20 @@ def test_home_and_share_use_live_bot_name() -> None:
     brand.apply_bot_name("AcmeStars")
     user = User(id=1, first_name="Dan", xp=0)
     level = LevelInfo(level=1, min_xp=0, multiplier_bp=100, next_level=2, next_xp=100)
-    home = texts.home(user, balance=0, held=0, level=level, boost_bp=100, boost_until=None, link="https://t.me/x")
+    home = texts.home(
+        user, balance=0, held=0, level=level, boost_bp=100, boost_until=None, link="https://t.me/x"
+    )
     assert "AcmeStars" in home
     assert "KodoStars" not in home
     hooked_home = texts.home(
-        user, balance=0, held=0, level=level, boost_bp=100, boost_until=None, link="https://t.me/x", l1_bonus=10
+        user,
+        balance=0,
+        held=0,
+        level=level,
+        boost_bp=100,
+        boost_until=None,
+        link="https://t.me/x",
+        l1_bonus=10,
     )
     assert "за каждого друга" in hooked_home
 

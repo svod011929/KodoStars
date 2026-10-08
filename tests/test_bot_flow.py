@@ -105,10 +105,18 @@ async def test_op_gate_unverified_shows_tgrass_sponsors(harness: BotHarness, mon
     monkeypatch.setattr(TgrassAdapter, "check", _blocked)
     monkeypatch.setattr(TgrassAdapter, "verify", _blocked)
     await _start(h, USER_ID)
-    assert "tgrass" in h.tg.last_text(USER_ID).lower() or "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID)
+    assert (
+        "tgrass" in h.tg.last_text(USER_ID).lower()
+        or "Подпишитесь" in h.tg.last_text(USER_ID)
+        or "Tgrass" in h.tg.last_text(USER_ID)
+    )
     # Menu stays gated until Tgrass is done.
     await h.feed(callback_update(USER_ID, "menu:daily"))
-    assert "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID) or "задан" in h.tg.last_text(USER_ID).lower()
+    assert (
+        "Подпишитесь" in h.tg.last_text(USER_ID)
+        or "Tgrass" in h.tg.last_text(USER_ID)
+        or "задан" in h.tg.last_text(USER_ID).lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -284,9 +292,7 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness, monkey
 
     monkeypatch.setattr("app.services.fragment.buy_stars", _fake_buy)
     await h.feed(callback_update(ADMIN_ID, "admin:wd:fragment:1"))
-    assert "отправлен" in h.tg.last_text(USER_ID) or any(
-        "Отправлено" in a for a in h.tg.alerts()
-    )
+    assert "отправлен" in h.tg.last_text(USER_ID) or any("Отправлено" in a for a in h.tg.alerts())
     async with h.factory() as session:
         wd = await session.get(Withdrawal, 1)
         assert wd.status == WithdrawalStatus.SENT.value

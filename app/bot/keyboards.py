@@ -97,9 +97,7 @@ def daily_menu(claimed: bool) -> InlineKeyboardMarkup:
     rows = []
     if not claimed:
         rows.append([button("Забрать награду", "daily:claim", icon="gift")])
-    rows.append(
-        [button("Задания", "menu:tasks", icon="tasks"), button("В меню", "menu:home", icon="home")]
-    )
+    rows.append([button("Задания", "menu:tasks", icon="tasks"), button("В меню", "menu:home", icon="home")])
     return markup(*rows)
 
 
@@ -147,9 +145,7 @@ def task_card(task: Task, done: bool) -> InlineKeyboardMarkup:
         }.get(task.kind, "Выполнить")
         icon = "refresh" if task.kind in (TaskKind.INVITE.value, TaskKind.STREAK.value) else "check"
         rows.append([button(label, f"task:do:{task.id}", icon=icon)])
-    rows.append(
-        [button("К заданиям", "menu:tasks", icon="back"), button("В меню", "menu:home", icon="home")]
-    )
+    rows.append([button("К заданиям", "menu:tasks", icon="back"), button("В меню", "menu:home", icon="home")])
     return markup(*rows)
 
 
@@ -211,9 +207,7 @@ def withdraw_keyboard(
             rows.append(nav)
     if catalog_error:
         rows.append([button("Обновить каталог", "menu:withdraw", icon="refresh")])
-    rows.append(
-        [button("Мои заявки", "wd:list", icon="doc"), button("В меню", "menu:home", icon="home")]
-    )
+    rows.append([button("Мои заявки", "wd:list", icon="doc"), button("В меню", "menu:home", icon="home")])
     return markup(*rows)
 
 
@@ -238,9 +232,7 @@ def help_menu(support: str) -> InlineKeyboardMarkup:
         handle = support.lstrip("@")
         if handle and " " not in handle:
             rows.append([url_button("Написать в поддержку", f"https://t.me/{handle}", icon="mail")])
-    rows.append(
-        [button("Условия", "menu:terms", icon="doc"), button("В меню", "menu:home", icon="home")]
-    )
+    rows.append([button("Условия", "menu:terms", icon="doc"), button("В меню", "menu:home", icon="home")])
     return markup(*rows)
 
 

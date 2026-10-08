@@ -139,9 +139,7 @@ class WebServer:
     # --- handlers ---------------------------------------------------------------------
 
     async def landing(self, request: web.Request) -> web.Response:
-        html = LANDING_PAGE.replace("{username}", self._bot_username).replace(
-            "{bot}", brand.bot_name()
-        )
+        html = LANDING_PAGE.replace("{username}", self._bot_username).replace("{bot}", brand.bot_name())
         return web.Response(text=html, content_type="text/html", charset="utf-8")
 
     async def health(self, request: web.Request) -> web.Response:
@@ -237,9 +235,7 @@ class WebServer:
         pending: list[DomainEvent] = []
         async with self._factory() as session:
             settings = await self._store.effective(session)
-            result = await piarflow_webhook.handle_unsubscribe(
-                session, payload=payload, settings=settings
-            )
+            result = await piarflow_webhook.handle_unsubscribe(session, payload=payload, settings=settings)
             await session.commit()
             pending = events.drain(session)
         if pending and self._events_sink is not None:
@@ -275,9 +271,7 @@ class WebServer:
         pending: list[DomainEvent] = []
         async with self._factory() as session:
             settings = await self._store.effective(session)
-            result = await tgrass_webhook.handle_webhook(
-                session, payload=payload, settings=settings
-            )
+            result = await tgrass_webhook.handle_webhook(session, payload=payload, settings=settings)
             await session.commit()
             pending = events.drain(session)
         if pending and self._events_sink is not None:
@@ -303,9 +297,7 @@ class WebServer:
             return web.json_response({"is_member": False}, status=429)
         async with self._factory() as session:
             settings = await self._store.effective(session)
-            if not tgrass_member.member_key_matches(
-                settings.tgrass_member_key, request.query.get("api_key")
-            ):
+            if not tgrass_member.member_key_matches(settings.tgrass_member_key, request.query.get("api_key")):
                 log.info("tgrass_member_bad_key", ip=ip)
                 return web.json_response({"is_member": False})
             raw_id = (request.query.get("telegram_id") or "").strip()

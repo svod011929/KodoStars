@@ -54,6 +54,4 @@ async def render_home(
         device_notice=notice,
         l1_bonus=settings.referral_l1_bonus,
     )
-    return text, keyboards.main_menu(
-        is_admin, device_url=device_url, l1_bonus=settings.referral_l1_bonus
-    )
+    return text, keyboards.main_menu(is_admin, device_url=device_url, l1_bonus=settings.referral_l1_bonus)

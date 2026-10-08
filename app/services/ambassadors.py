@@ -115,16 +115,12 @@ async def get_slot(session: AsyncSession, slot_id: int) -> AmbassadorSlot:
 
 async def list_user_slots(session: AsyncSession, user_id: int) -> list[AmbassadorSlot]:
     result = await session.execute(
-        select(AmbassadorSlot)
-        .where(AmbassadorSlot.user_id == user_id)
-        .order_by(AmbassadorSlot.id.desc())
+        select(AmbassadorSlot).where(AmbassadorSlot.user_id == user_id).order_by(AmbassadorSlot.id.desc())
     )
     return list(result.scalars().all())
 
 
-async def list_by_status(
-    session: AsyncSession, status: str, *, limit: int = 30
-) -> list[AmbassadorSlot]:
+async def list_by_status(session: AsyncSession, status: str, *, limit: int = 30) -> list[AmbassadorSlot]:
     result = await session.execute(
         select(AmbassadorSlot)
         .where(AmbassadorSlot.status == status)
@@ -138,9 +134,9 @@ async def count_pending(session: AsyncSession) -> int:
     return int(
         (
             await session.execute(
-                select(func.count()).select_from(AmbassadorSlot).where(
-                    AmbassadorSlot.status == AmbassadorStatus.PENDING.value
-                )
+                select(func.count())
+                .select_from(AmbassadorSlot)
+                .where(AmbassadorSlot.status == AmbassadorStatus.PENDING.value)
             )
         ).scalar_one()
     )

@@ -59,9 +59,7 @@ async def amb_link_enter(message: Message, state: FSMContext) -> None:
 
 
 @router.message(StateFilter(UserFSM.amb_title), F.text)
-async def amb_title_enter(
-    message: Message, session: AsyncSession, db_user: User, state: FSMContext
-) -> None:
+async def amb_title_enter(message: Message, session: AsyncSession, db_user: User, state: FSMContext) -> None:
     raw = (message.text or "").strip()
     if raw.startswith("/"):
         await state.clear()

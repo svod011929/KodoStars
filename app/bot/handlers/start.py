@@ -47,16 +47,12 @@ async def _gate_op(
 ) -> tuple[str, str | None, object | None, OpResult | None]:
     """Verified → PiarFlow then Tgrass; unverified → Tgrass only."""
     ctx = _ctx(user, chat_id, bot)
-    result = await op_gate.enforce(
-        ctx, session, verify=verify, settings=settings, user=user
-    )
+    result = await op_gate.enforce(ctx, session, verify=verify, settings=settings, user=user)
     if result.allowed:
         return "ok", None, None, result
     return (
         "op",
-        texts.op_blocked(
-            result.provider, result.message, l1_bonus=settings.referral_l1_bonus
-        ),
+        texts.op_blocked(result.provider, result.message, l1_bonus=settings.referral_l1_bonus),
         keyboards.op_keyboard(result.sponsors),
         result,
     )
@@ -141,9 +137,7 @@ async def cmd_start(
     )
     campaign = campaigns.parse_campaign_payload(payload)
     if campaign:
-        await campaigns.record_hit(
-            session, code=campaign, user_id=db_user.id, is_new=first_start
-        )
+        await campaigns.record_hit(session, code=campaign, user_id=db_user.id, is_new=first_start)
     if db_user.is_banned:
         await message.answer(
             pe.premiumize(texts.banned(db_user.ban_reason or "бан", settings.support_contact))
@@ -210,9 +204,7 @@ async def op_verify(
         return
     db_user.last_op_ok_at = datetime.now(UTC)
     await safe_answer(call, "Доступ открыт")
-    await _try_redeem_pending_promo(
-        session=session, user=db_user, settings=settings, state=state, reply=call
-    )
+    await _try_redeem_pending_promo(session=session, user=db_user, settings=settings, state=state, reply=call)
     await bump_activity(session, db_user, 1)
     await referrals.activate_if_ready(session, user=db_user, settings=settings)
     home_text, home_markup = await render_home(

@@ -154,13 +154,9 @@ async def setting_set(
                         value=value,
                     )
             elif key == "currency_emoji_fallback" and fallback:
-                await _apply_setting(
-                    session, settings_store, key, fallback, message.from_user.id
-                )
+                await _apply_setting(session, settings_store, key, fallback, message.from_user.id)
             else:
-                raise EconomyError(
-                    "Вставьте премиум-эмодзи из Telegram или numeric emoji-id"
-                )
+                raise EconomyError("Вставьте премиум-эмодзи из Telegram или numeric emoji-id")
         else:
             await _apply_setting(session, settings_store, key, message.text or "", message.from_user.id)
     except EconomyError as exc:
@@ -179,9 +175,7 @@ async def providers_home(call: CallbackQuery, session: AsyncSession, settings: S
     states = {name: name in enabled for name in CASCADE}
     configured = {name: provider_configured(name, settings) for name in CASCADE}
     await safe_answer(call)
-    await safe_edit(
-        call.message, texts.providers_home(states, configured, settings), kb.providers(states)
-    )
+    await safe_edit(call.message, texts.providers_home(states, configured, settings), kb.providers(states))
 
 
 @router.callback_query(F.data.startswith("admin:prov:tg:"))
@@ -203,6 +197,4 @@ async def providers_toggle(call: CallbackQuery, session: AsyncSession, settings:
     states = {item: item in enabled for item in CASCADE}
     configured = {item: provider_configured(item, settings) for item in CASCADE}
     await safe_answer(call, f"{name}: {'ВКЛ' if row.enabled else 'ВЫКЛ'}")
-    await safe_edit(
-        call.message, texts.providers_home(states, configured, settings), kb.providers(states)
-    )
+    await safe_edit(call.message, texts.providers_home(states, configured, settings), kb.providers(states))

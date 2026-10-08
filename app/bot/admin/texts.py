@@ -76,17 +76,11 @@ def home(version: str, pending: int, running_broadcast: bool, maintenance: bool)
 
 
 def catalog_hub() -> str:
-    return (
-        "📦 <b>Каталог</b>\n\n"
-        "Задания, бусты, промокоды, приветки и кампании закупки."
-    )
+    return "📦 <b>Каталог</b>\n\nЗадания, бусты, промокоды, приветки и кампании закупки."
 
 
 def system_hub() -> str:
-    return (
-        "⚙️ <b>Система</b>\n\n"
-        "Платежи XTR, админы, журнал действий, антифрод и экспорт данных."
-    )
+    return "⚙️ <b>Система</b>\n\nПлатежи XTR, админы, журнал действий, антифрод и экспорт данных."
 
 
 def stats(
@@ -987,11 +981,7 @@ def no_access() -> str:
 
 
 def ambassadors_hub(pending: int, approved: int) -> str:
-    return (
-        "🤝 <b>Амбассадоры</b>\n\n"
-        f"На проверке: <b>{pending}</b>\n"
-        f"Одобрено: <b>{approved}</b>"
-    )
+    return f"🤝 <b>Амбассадоры</b>\n\nНа проверке: <b>{pending}</b>\nОдобрено: <b>{approved}</b>"
 
 
 def ambassadors_empty(kind: str) -> str:

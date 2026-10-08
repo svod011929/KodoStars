@@ -46,7 +46,10 @@ def home(pending: int = 0, amb_pending: int = 0) -> InlineKeyboardMarkup:
     wd_label = f"Выводы ({pending})" if pending else "Выводы"
     amb_label = f"Амбассадоры ({amb_pending})" if amb_pending else "Амбассадоры"
     return markup(
-        [button("Статистика", "admin:stats", icon="stats"), button("Пользователи", "admin:users", icon="users")],
+        [
+            button("Статистика", "admin:stats", icon="stats"),
+            button("Пользователи", "admin:users", icon="users"),
+        ],
         [button(wd_label, "admin:wd", icon="withdraw"), button(amb_label, "admin:amb", icon="handshake")],
         [button("Рассылка", "admin:bc", icon="broadcast"), button("Каталог", "admin:catalog", icon="box")],
         [button("ОП", "admin:prov", icon="lock"), button("Система", "admin:system", icon="admin")],
@@ -58,7 +61,10 @@ def catalog_hub() -> InlineKeyboardMarkup:
     return markup(
         [button("Задания", "admin:tasks", icon="tasks"), button("Бусты", "admin:boosts", icon="boost")],
         [button("Промокоды", "admin:promo:list:0", icon="promo")],
-        [button("Приветки", "admin:greet", icon="megaphone"), button("Кампании", "admin:camp", icon="growth")],
+        [
+            button("Приветки", "admin:greet", icon="megaphone"),
+            button("Кампании", "admin:camp", icon="growth"),
+        ],
         [_back()],
     )
 
@@ -96,7 +102,9 @@ def reconcile(has_drift: bool) -> InlineKeyboardMarkup:
 
 
 def users_home(recent: Sequence[User]) -> InlineKeyboardMarkup:
-    rows = [[button(f"{u.display_name[:24]} · {u.id}", f"admin:u:{u.id}", icon="profile")] for u in recent[:5]]
+    rows = [
+        [button(f"{u.display_name[:24]} · {u.id}", f"admin:u:{u.id}", icon="profile")] for u in recent[:5]
+    ]
     rows.append([button("Подозрительные", "admin:suspicious", icon="fraud"), _back()])
     return markup(*rows)
 
@@ -315,7 +323,10 @@ def broadcast_button_step() -> InlineKeyboardMarkup:
 
 
 def broadcast_audience() -> InlineKeyboardMarkup:
-    rows = [[button(label, f"admin:bc:aud:{key}", icon="users")] for key, label in BROADCAST_AUDIENCE_LABELS.items()]
+    rows = [
+        [button(label, f"admin:bc:aud:{key}", icon="users")]
+        for key, label in BROADCAST_AUDIENCE_LABELS.items()
+    ]
     rows.append([button("Отмена", "admin:bc", icon="cross")])
     return markup(*rows)
 
@@ -385,7 +396,9 @@ def task_card(task: Task) -> InlineKeyboardMarkup:
 
 
 def task_kinds() -> InlineKeyboardMarkup:
-    rows = [[button(label, f"admin:task:new:{kind}", icon="tasks")] for kind, label in TASK_KIND_LABELS.items()]
+    rows = [
+        [button(label, f"admin:task:new:{kind}", icon="tasks")] for kind, label in TASK_KIND_LABELS.items()
+    ]
     rows.append([button("Отмена", "admin:tasks", icon="cross")])
     return markup(*rows)
 
@@ -565,7 +578,11 @@ def setting_edit(key: str, overridden: bool, is_bool: bool) -> InlineKeyboardMar
 
 def providers(states: dict[str, bool]) -> InlineKeyboardMarkup:
     rows = [
-        [button(PROVIDER_TITLES[name], f"admin:prov:tg:{name}", icon="ok_green" if states.get(name) else "off")]
+        [
+            button(
+                PROVIDER_TITLES[name], f"admin:prov:tg:{name}", icon="ok_green" if states.get(name) else "off"
+            )
+        ]
         for name in CASCADE
     ]
     rows.append(
@@ -601,7 +618,10 @@ def admins(rows_db: Sequence[Admin], can_manage: bool) -> InlineKeyboardMarkup:
     rows = []
     if can_manage:
         rows.extend(
-            [[button(f"Удалить {row.user_id}", f"admin:adm:del:{row.user_id}", icon="trash")] for row in rows_db]
+            [
+                [button(f"Удалить {row.user_id}", f"admin:adm:del:{row.user_id}", icon="trash")]
+                for row in rows_db
+            ]
         )
         rows.append([button("Добавить админа", "admin:adm:add", icon="plus")])
     rows.append([_back("admin:system")])

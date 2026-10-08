@@ -72,7 +72,9 @@ class TgrassAdapter:
 
         data = as_dict(payload)
         if status >= 400:
-            return OpResult.fail_open_result(self.name, str(data.get("detail") or data.get("message") or status))
+            return OpResult.fail_open_result(
+                self.name, str(data.get("detail") or data.get("message") or status)
+            )
 
         result_status = str(data.get("status") or "").lower()
         offers = as_list(data.get("offers") if isinstance(data.get("offers"), list) else data)
