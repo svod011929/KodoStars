@@ -191,12 +191,25 @@ def star() -> str:
     return currency()
 
 
+_TG_EMOJI_TAG = re.compile(r"(<tg-emoji\b[^>]*>.*?</tg-emoji>)", re.DOTALL)
+
+
 def premiumize(text: str) -> str:
-    """Expand ``{bot}`` and replace known unicode emoji with ``<tg-emoji>`` tags."""
+    """Expand ``{bot}`` and replace known unicode emoji with ``<tg-emoji>`` tags.
+
+    Existing tags (e.g. the currency glyph) are kept verbatim; only the text
+    around them is converted, so the call is idempotent.
+    """
     if not text:
         return text
     text = brand.expand(text) or text
-    if "<tg-emoji" in text:
+    parts = _TG_EMOJI_TAG.split(text)
+    # The capture group keeps tags at odd indexes.
+    return "".join(part if index % 2 else _premiumize_plain(part) for index, part in enumerate(parts))
+
+
+def _premiumize_plain(text: str) -> str:
+    if not text:
         return text
     out = text
     # Currency glyphs → live override (placeholder avoids re-matching fallback inside the tag).

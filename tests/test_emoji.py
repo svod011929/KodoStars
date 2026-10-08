@@ -26,6 +26,22 @@ def test_premiumize_wraps_known_unicode() -> None:
     assert pe.premiumize(out) == out  # idempotent once tagged
 
 
+def test_premiumize_wraps_emoji_next_to_existing_tags() -> None:
+    currency_tag = pe.currency()
+    out = pe.premiumize(f"🔥 Баланс: 10 {currency_tag} · 🔒")
+    assert '<tg-emoji emoji-id="6041731551845159060">🔥</tg-emoji>' in out
+    assert '<tg-emoji emoji-id="6037249452824072506">🔒</tg-emoji>' in out
+    assert out.count("<tg-emoji") == 3  # the existing tag is kept as is, not nested
+    assert pe.premiumize(out) == out
+
+
+def test_premiumize_leaves_overridden_currency_fallback_inside_tag() -> None:
+    pe.apply_currency("6032644646587338669", "🎁")
+    out = pe.premiumize(f"Награда {pe.currency()} и подарок 🎁")
+    assert out.count('<tg-emoji emoji-id="6032644646587338669">🎁</tg-emoji>') == 2
+    assert '<tg-emoji emoji-id="6032644646587338669"><tg-emoji' not in out
+
+
 def test_split_icon_strips_leading_emoji() -> None:
     label, icon = pe.split_icon("👤 Профиль")
     assert label == "Профиль"
