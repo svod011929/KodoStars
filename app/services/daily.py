@@ -36,8 +36,11 @@ def seconds_until_utc_midnight(now: datetime | None = None) -> int:
     return max(int((tomorrow - now).total_seconds()), 0)
 
 
-async def preview(session: AsyncSession, *, user: User, settings: Settings) -> DailyPreview:
-    today = utc_today()
+async def preview(
+    session: AsyncSession, *, user: User, settings: Settings, now: datetime | None = None
+) -> DailyPreview:
+    now = now or utc_now()
+    today = now.date()
     claimed = user.last_daily_on == today
     streak = next_streak(user, today) if not claimed else user.streak + 1
     base = base_reward_for(streak, settings)
@@ -48,7 +51,7 @@ async def preview(session: AsyncSession, *, user: User, settings: Settings) -> D
         streak_if_claimed=streak,
         base_reward=base,
         estimated_reward=apply_multipliers(base, level_bp, boost_bp),
-        seconds_until_reset=seconds_until_utc_midnight(),
+        seconds_until_reset=seconds_until_utc_midnight(now),
         lost_streak=broken_streak(user, today),
     )
 

@@ -51,17 +51,27 @@ async def test_claim_due_picks_each_user_once_per_day(session, settings) -> None
     await session.flush()
 
     due = await reminders.claim_due(session, today=today, settings=settings)
-    assert [u.id for u in due] == [1, 3, 5, 12]
-    assert all(u.last_reminded_on == today for u in due)
-    assert await reminders.claim_due(session, today=today, settings=settings) == []
+    assert [u.id for u in due.users] == [1, 3, 5, 12] and due.cursor == 12
+    assert all(u.last_reminded_on == today for u in due.users)
+    assert await reminders.claim_due(session, today=today, settings=settings) == reminders.Batch([], None)
 
 
 @pytest.mark.asyncio
-async def test_claim_due_respects_the_batch_limit(session, settings) -> None:
-    yesterday = utc_today() - timedelta(days=1)
+async def test_claim_due_pages_through_the_audience(session, settings) -> None:
+    today = utc_today()
+    yesterday = today - timedelta(days=1)
     session.add_all([User(id=i, first_name="U", last_daily_on=yesterday) for i in range(1, 6)])
     await session.flush()
-    first = await reminders.claim_due(session, today=utc_today(), settings=settings, limit=2)
-    rest = await reminders.claim_due(session, today=utc_today(), settings=settings, limit=10)
-    assert [u.id for u in first] == [1, 2]
-    assert [u.id for u in rest] == [3, 4, 5]
+    first = await reminders.claim_due(session, today=today, settings=settings, limit=2)
+    assert ([u.id for u in first.users], first.cursor) == ([1, 2], 2)
+
+    # Another process got to user 3 between our pages: nobody is reminded twice.
+    (await session.get(User, 3)).last_reminded_on = today
+    await session.flush()
+    rest = await reminders.claim_due(session, today=today, settings=settings, after_id=first.cursor, limit=10)
+    assert ([u.id for u in rest.users], rest.cursor) == ([4, 5], 5)
+    assert await reminders.claim_due(session, today=today, settings=settings, after_id=5) == reminders.Batch(
+        [], None
+    )
+    tomorrow = await reminders.claim_due(session, today=today + timedelta(days=1), settings=settings)
+    assert [u.id for u in tomorrow.users] == [1, 2, 3, 4, 5]

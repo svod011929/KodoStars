@@ -106,9 +106,7 @@ class EngagementScheduler:
         report.settled_weeks = settled or ()
         await self._guarded("contest_week", partial(self._sync_contest_week, now, settings), failed)
         if reminders.in_send_window(now, settings):
-            run = await self._guarded(
-                "reminders", partial(self._send_reminders, now.date(), settings), failed
-            )
+            run = await self._guarded("reminders", partial(self._send_reminders, now.date()), failed)
             report.reminders = run or ReminderRun()
         return report
 
@@ -153,13 +151,34 @@ class EngagementScheduler:
             await contests.sync_week(session, now=now, settings=settings)
             await session.commit()
 
-    async def _send_reminders(self, today: date, settings: Settings) -> ReminderRun:
+    async def _send_reminders(self, today: date) -> ReminderRun:
+        """Remind everyone due ``today``; stops as soon as the day or the send window ends.
+
+        A run can take a while for a big audience, so the clock and the settings are
+        re-read before every batch and the date before every message: a reminder is
+        about today's claim and must not arrive after midnight.
+        """
         run = ReminderRun()
-        pause = 1.0 / max(settings.broadcast_rate_per_sec, 1)
         markup = keyboards.reminder_menu()
-        while outbox := await self._claim_batch(today, settings):
+        after_id = 0
+        while True:
+            now = self._clock()
+            settings = await self._settings()
+            if (
+                now.date() != today
+                or settings.maintenance_mode
+                or not reminders.in_send_window(now, settings)
+            ):
+                break
+            outbox, cursor = await self._claim_batch(now, settings, after_id)
+            if cursor is None:
+                break
+            after_id = cursor
+            pause = 1.0 / max(settings.broadcast_rate_per_sec, 1)
             blocked: list[int] = []
             for user_id, text in outbox:
+                if self._clock().date() != today:
+                    break
                 send = partial(self._bot.send_message, user_id, text, reply_markup=markup)
                 result = await deliver(send, chat_id=user_id)
                 match result:
@@ -181,12 +200,15 @@ class EngagementScheduler:
             log.info("daily_reminders_sent", sent=run.sent, blocked=run.blocked, failed=run.failed)
         return run
 
-    async def _claim_batch(self, today: date, settings: Settings) -> list[tuple[int, str]]:
+    async def _claim_batch(
+        self, now: datetime, settings: Settings, after_id: int
+    ) -> tuple[list[tuple[int, str]], int | None]:
+        today = now.date()
         async with self._factory() as session:
-            due = await reminders.claim_due(session, today=today, settings=settings)
+            batch = await reminders.claim_due(session, today=today, settings=settings, after_id=after_id)
             outbox = []
-            for user in due:
-                preview = await daily.preview(session, user=user, settings=settings)
+            for user in batch.users:
+                preview = await daily.preview(session, user=user, settings=settings, now=now)
                 outbox.append((user.id, texts.daily_reminder(preview, current_streak(user, today))))
             await session.commit()
-        return outbox
+        return outbox, batch.cursor

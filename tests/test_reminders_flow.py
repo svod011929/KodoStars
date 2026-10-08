@@ -1,6 +1,6 @@
 """Daily reminders end to end: scheduler tick → message → buttons → opt-out."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 
 import pytest
 import pytest_asyncio
@@ -121,6 +121,31 @@ async def test_maintenance_and_runtime_switch_pause_reminders(harness: BotHarnes
     assert (await _remind(h)).sent == 0
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:reset"))
     assert (await _remind(h)).sent == 1
+
+
+@pytest.mark.asyncio
+async def test_a_run_that_reaches_midnight_stops_sending(harness: BotHarness) -> None:
+    h = harness
+    for user_id in (USER_ID, THIRD_ID):
+        await h.feed(message_update(user_id, "/start"))
+        await _set(h, user_id, last_daily_on=utc_today() - timedelta(days=1), streak=2)
+    async with h.factory() as session:
+        await h.store.set(session, key="daily_reminder_hour_utc", raw="22", admin_id=ADMIN_ID)
+        await session.commit()
+    h.tg.clear()
+    before = datetime.combine(utc_today(), time(23, 59, 58), tzinfo=UTC)
+
+    def clock() -> datetime:
+        # Midnight passes while the first reminder is on its way.
+        return before + timedelta(seconds=3) if h.tg.sent(SendMessage) else before
+
+    run = (await EngagementScheduler(h.bot, h.factory, h.store, h.notifier, clock=clock).tick()).reminders
+    assert run.sent == 1 and h.tg.texts(THIRD_ID) == []
+    assert "сгорит через 0 мин" in h.tg.last_text(USER_ID)
+
+    next_evening = datetime.combine(utc_today() + timedelta(days=1), time(22, 5), tzinfo=UTC)
+    scheduler = EngagementScheduler(h.bot, h.factory, h.store, h.notifier, clock=lambda: next_evening)
+    assert (await scheduler.tick()).reminders.sent == 2
 
 
 @pytest.mark.asyncio
