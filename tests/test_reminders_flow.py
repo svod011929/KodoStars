@@ -8,6 +8,7 @@ from aiogram.methods import EditMessageText, SendMessage
 
 from app.bot.scheduler import EngagementScheduler, ReminderRun
 from app.db.models import User
+from app.services import contests
 from app.services.streaks import utc_today
 from tests.conftest import ADMIN_ID, OTHER_ID, USER_ID, BotHarness
 from tests.fake_telegram import callback_update, message_update
@@ -120,6 +121,35 @@ async def test_maintenance_and_runtime_switch_pause_reminders(harness: BotHarnes
     assert (await _remind(h)).sent == 0
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:reset"))
     assert (await _remind(h)).sent == 1
+
+
+@pytest.mark.asyncio
+async def test_a_broken_job_is_reported_once_and_does_not_stop_the_others(
+    harness: BotHarness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    h = harness
+    await h.feed(message_update(ADMIN_ID, "/start"))
+    await h.feed(message_update(USER_ID, "/start"))
+    await _set(h, USER_ID, last_daily_on=utc_today() - timedelta(days=1), streak=2)
+
+    async def broken(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(contests, "settle_due", broken)
+    h.tg.clear()
+    scheduler = _scheduler(h)
+    report = await scheduler.tick()
+    assert report.failed_jobs == ["contest_settle"] and report.reminders.sent == 1
+    assert "«итоги конкурса недели» падает" in h.tg.last_text(ADMIN_ID)
+
+    h.tg.clear()
+    assert (await scheduler.tick()).failed_jobs == ["contest_settle"]
+    assert h.tg.texts(ADMIN_ID) == []
+    monkeypatch.undo()
+    assert (await scheduler.tick()).failed_jobs == []
+    monkeypatch.setattr(contests, "settle_due", broken)
+    await scheduler.tick()
+    assert "«итоги конкурса недели» падает" in h.tg.last_text(ADMIN_ID)
 
 
 def _last_edit_markup(h: BotHarness):

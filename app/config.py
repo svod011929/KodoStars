@@ -200,6 +200,8 @@ def setting_group(key: str) -> str | None:
 
 
 MAX_CONTEST_PLACES = 10
+# Balances are 32-bit integers on PostgreSQL; a typo must not make every payout fail.
+MAX_CONTEST_PRIZE = 1_000_000
 
 
 def parse_prizes(raw: str) -> tuple[int, ...]:
@@ -207,8 +209,8 @@ def parse_prizes(raw: str) -> tuple[int, ...]:
     parts = [part.strip() for part in str(raw).replace(";", ",").split(",") if part.strip()]
     if not 1 <= len(parts) <= MAX_CONTEST_PLACES:
         raise ValueError(f"CONTEST_PRIZES: от 1 до {MAX_CONTEST_PLACES} призов через запятую")
-    if not all(part.isdigit() and int(part) > 0 for part in parts):
-        raise ValueError("CONTEST_PRIZES: каждый приз — целое число больше нуля")
+    if not all(part.isascii() and part.isdigit() and 0 < int(part) <= MAX_CONTEST_PRIZE for part in parts):
+        raise ValueError(f"CONTEST_PRIZES: каждый приз — целое число от 1 до {MAX_CONTEST_PRIZE}")
     prizes = tuple(int(part) for part in parts)
     if any(lower > higher for higher, lower in pairwise(prizes)):
         raise ValueError("CONTEST_PRIZES: приз за место не может быть больше, чем за место выше")

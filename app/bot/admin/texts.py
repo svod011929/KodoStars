@@ -517,6 +517,22 @@ def contest_settled(
     return "\n".join(lines)
 
 
+_SCHEDULER_JOBS = {
+    "contest_settle": "итоги конкурса недели",
+    "contest_week": "открытие недели конкурса",
+    "reminders": "напоминания о ежедневке",
+}
+
+
+def scheduler_job_failed(job: str) -> str:
+    return (
+        f"⚠️ <b>Фоновая задача «{h(_SCHEDULER_JOBS.get(job, job))}» падает с ошибкой</b>\n"
+        "Бот повторяет её раз в минуту, остальные задачи работают. "
+        "Трейсбек — в логах (<code>engagement_job_failed</code>). "
+        "Следующее сообщение — только если задача снова сломается после починки."
+    )
+
+
 def withdrawal_cancelled_alert(wd: Withdrawal, name: str) -> str:
     return f"↩️ Заявка #{wd.id} на {h(wd.gift_label)} отменена пользователем {h(name)}."
 

@@ -79,9 +79,10 @@ def test_weeks_run_monday_to_monday_utc() -> None:
 def test_prizes_are_a_short_non_increasing_list() -> None:
     assert parse_prizes(" 100, 50 ,25 ") == (100, 50, 25)
     assert parse_prizes("10;10") == (10, 10)
-    for bad in ("", "0", "abc", "-5", "10,20", ",".join(["5"] * 11)):
+    for bad in ("", "0", "abc", "-5", "10,20", ",".join(["5"] * 11), "3000000000,50", "²"):
         with pytest.raises(ValueError):
             parse_prizes(bad)
+    assert parse_prizes("1000000") == (1_000_000,)
     assert Settings(contest_prizes="70, 30").contest_prizes == "70,30"
     assert Settings(contest_prizes="70, 30").model_copy(
         update={"contest_prizes": "9 ,8"}

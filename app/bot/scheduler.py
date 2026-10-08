@@ -3,14 +3,15 @@
 The loop ticks once a minute. Every tick reads the effective runtime settings, so
 admins can change the reminder hour or switch a feature off without a restart.
 Database work happens in short sessions that are committed before any message is
-sent; Telegram I/O never runs inside a transaction.
+sent; Telegram I/O never runs inside a transaction. Jobs fail independently: a
+broken one is logged, reported to the admins once, and retried on the next tick.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from functools import partial
@@ -21,12 +22,14 @@ from aiogram import Bot
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot import keyboards, texts
+from app.bot.admin import texts as admin_texts
 from app.bot.notify import Notifier
 from app.config import Settings
 from app.services import contests, daily, events, reminders
 from app.services import users as user_service
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.delivery import Delivery, deliver
+from app.services.events import DomainEvent
 from app.services.streaks import current_streak
 
 log = structlog.get_logger("kodostars.scheduler")
@@ -49,6 +52,7 @@ class ReminderRun:
 class TickReport:
     settled_weeks: tuple[str, ...] = ()
     reminders: ReminderRun = field(default_factory=ReminderRun)
+    failed_jobs: list[str] = field(default_factory=list)
 
 
 class EngagementScheduler:
@@ -69,6 +73,7 @@ class EngagementScheduler:
         self._clock = clock
         self._interval = interval
         self._task: asyncio.Task[None] | None = None
+        self._failing: set[str] = set()
 
     def start(self) -> None:
         if self._task is None or self._task.done():
@@ -92,20 +97,44 @@ class EngagementScheduler:
 
     async def tick(self) -> TickReport:
         now = self._clock()
-        async with self._factory() as session:
-            settings = await self._store.effective(session)
+        settings = await self._settings()
         report = TickReport()
         if settings.maintenance_mode:
             return report
-        report.settled_weeks = await self._run_contest(now, settings)
+        failed = report.failed_jobs
+        settled = await self._guarded("contest_settle", partial(self._settle_contests, now), failed)
+        report.settled_weeks = settled or ()
+        await self._guarded("contest_week", partial(self._sync_contest_week, now, settings), failed)
         if reminders.in_send_window(now, settings):
-            report.reminders = await self._send_reminders(now.date(), settings)
+            run = await self._guarded(
+                "reminders", partial(self._send_reminders, now.date(), settings), failed
+            )
+            report.reminders = run or ReminderRun()
         return report
 
-    async def _run_contest(self, now: datetime, settings: Settings) -> tuple[str, ...]:
+    async def _settings(self) -> Settings:
+        async with self._factory() as session:
+            return await self._store.effective(session)
+
+    async def _guarded[T](self, job: str, run: Callable[[], Awaitable[T]], failed: list[str]) -> T | None:
+        """Run one job; a failure is logged and reported to the admins once per streak."""
+        try:
+            result = await run()
+        except Exception:
+            log.exception("engagement_job_failed", job=job)
+            failed.append(job)
+            if job not in self._failing:
+                self._failing.add(job)
+                alert = DomainEvent("admin_alert", {"text": admin_texts.scheduler_job_failed(job)})
+                with contextlib.suppress(Exception):
+                    await self._notifier.dispatch_events([alert])
+            return None
+        self._failing.discard(job)
+        return result
+
+    async def _settle_contests(self, now: datetime) -> tuple[str, ...]:
         async with self._factory() as session:
             settled = await contests.settle_due(session, now=now)
-            await contests.sync_week(session, now=now, settings=settings)
             await session.commit()
             pending = events.drain(session)
         for results in settled:
@@ -118,6 +147,11 @@ class EngagementScheduler:
         if pending:
             await self._notifier.dispatch_events(pending)
         return tuple(results.contest.week_key for results in settled)
+
+    async def _sync_contest_week(self, now: datetime, settings: Settings) -> None:
+        async with self._factory() as session:
+            await contests.sync_week(session, now=now, settings=settings)
+            await session.commit()
 
     async def _send_reminders(self, today: date, settings: Settings) -> ReminderRun:
         run = ReminderRun()
