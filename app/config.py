@@ -51,6 +51,9 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "botohub_views_cooldown_seconds": int,
     "botohub_views_api_url": str,
     "payout_log_chat_id": int,
+    "daily_reminder_enabled": bool,
+    "daily_reminder_hour_utc": int,
+    "daily_reminder_window_days": int,
 }
 
 RUNTIME_SETTING_LABELS: dict[str, str] = {
@@ -93,6 +96,9 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "botohub_views_cooldown_seconds": "BotoHub Views: пауза между показами, с",
     "botohub_views_api_url": "BotoHub Views: URL SendPost",
     "payout_log_chat_id": "Канал выплат (chat_id, 0 = выкл)",
+    "daily_reminder_enabled": "Напоминания о ежедневке",
+    "daily_reminder_hour_utc": "Напоминания: час отправки (UTC, 0–23)",
+    "daily_reminder_window_days": "Напоминания: сколько дней после последнего захода",
 }
 
 # Compact admin settings hubs — every RUNTIME_OVERRIDABLE key must appear once.
@@ -114,6 +120,11 @@ SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
         "claim_cooldown_seconds",
         "currency_emoji_id",
         "currency_emoji_fallback",
+    ),
+    "engagement": (
+        "daily_reminder_enabled",
+        "daily_reminder_hour_utc",
+        "daily_reminder_window_days",
     ),
     "withdraw": (
         "withdraw_enabled",
@@ -153,6 +164,7 @@ SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
 SETTINGS_GROUP_LABELS: dict[str, str] = {
     "refs": "Рефералы",
     "rewards": "Награды",
+    "engagement": "Вовлечение",
     "withdraw": "Вывод",
     "antifraud": "Антитвинк",
     "traffic": "Трафик",
@@ -162,6 +174,7 @@ SETTINGS_GROUP_LABELS: dict[str, str] = {
 SETTINGS_GROUP_ICONS: dict[str, str] = {
     "refs": "people",
     "rewards": "gift",
+    "engagement": "bell",
     "withdraw": "withdraw",
     "antifraud": "fraud",
     "traffic": "lock",
@@ -202,6 +215,11 @@ class Settings(BaseSettings):
     daily_base_reward: int = 5
     daily_streak_bonus: int = 1
     daily_streak_cap: int = 7
+    # One nudge a day for users who have not claimed yet: a live streak about to
+    # lapse, or a lapsed one. Users who last claimed more than WINDOW days ago are left alone.
+    daily_reminder_enabled: bool = True
+    daily_reminder_hour_utc: int = 17
+    daily_reminder_window_days: int = 3
 
     withdraw_min: int = 50
     withdraw_max: int = 0
@@ -310,6 +328,20 @@ class Settings(BaseSettings):
     def _non_negative(cls, value: int) -> int:
         if value < 0:
             raise ValueError("value must be >= 0")
+        return value
+
+    @field_validator("daily_reminder_hour_utc")
+    @classmethod
+    def _hour_range(cls, value: int) -> int:
+        if not 0 <= value <= 23:
+            raise ValueError("DAILY_REMINDER_HOUR_UTC must be within 0..23")
+        return value
+
+    @field_validator("daily_reminder_window_days")
+    @classmethod
+    def _window_range(cls, value: int) -> int:
+        if not 1 <= value <= 30:
+            raise ValueError("DAILY_REMINDER_WINDOW_DAYS must be within 1..30")
         return value
 
     @field_validator("broadcast_rate_per_sec")

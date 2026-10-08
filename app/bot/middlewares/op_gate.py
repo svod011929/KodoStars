@@ -18,6 +18,7 @@ _SKIP_PREFIXES = (
     "op:",
     "admin:",
     "noop",
+    "remind:",  # opting out of reminders must never sit behind sponsor subscriptions
 )
 _SKIP_COMMANDS = {"/admin", "/start", "/help", "/paysupport", "/terms"}
 

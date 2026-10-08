@@ -14,7 +14,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
 from aiogram.enums import ParseMode, StickerType
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.methods import (
     AnswerCallbackQuery,
     AnswerPreCheckoutQuery,
@@ -113,6 +113,7 @@ class FakeSession(BaseSession):
         self.member_status: dict[tuple[str, int], str] = {}
         self.fail_refunds = False
         self.fail_send_gift = False
+        self.blocked_chats: set[int] = set()
         self._message_id = 1000
 
     async def close(self) -> None:
@@ -174,6 +175,8 @@ class FakeSession(BaseSession):
         if isinstance(method, GetMe):
             return self.bot_user()
         if isinstance(method, SendMessage):
+            if int(method.chat_id) in self.blocked_chats:
+                raise TelegramForbiddenError(method=method, message="Forbidden: bot was blocked by the user")
             return self._message(method.chat_id, method.text)
         if isinstance(method, EditMessageText):
             return self._message(method.chat_id or 0, method.text, message_id=method.message_id)

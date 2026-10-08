@@ -16,7 +16,9 @@ from app.services.referrals import referral_link
 router = Router(name="cabinet")
 
 
-async def profile_view(session: AsyncSession, user: User) -> tuple[str, InlineKeyboardMarkup]:
+async def profile_view(
+    session: AsyncSession, user: User, settings: Settings
+) -> tuple[str, InlineKeyboardMarkup]:
     balance = await ledger.get_balance(session, user.id)
     held = await withdrawals.held_total(session, user.id)
     refs = await referrals.referral_stats(session, user.id)
@@ -27,7 +29,8 @@ async def profile_view(session: AsyncSession, user: User) -> tuple[str, InlineKe
         product = await session.get(BoostProduct, boost.product_id)
         titles[boost.product_id] = product.title if product else "Буст"
     text = texts.profile(user, balance, held, info_for_xp(user.xp), refs, earned, boosts, titles)
-    return text, keyboards.profile_menu()
+    reminders = user.reminders_enabled if settings.daily_reminder_enabled else None
+    return text, keyboards.profile_menu(reminders)
 
 
 @router.callback_query(F.data == "menu:home")
@@ -49,11 +52,30 @@ async def menu_home(
 
 
 @router.callback_query(F.data == "menu:profile")
-async def menu_profile(call: CallbackQuery, session: AsyncSession, db_user: User, state: FSMContext) -> None:
+async def menu_profile(
+    call: CallbackQuery, session: AsyncSession, db_user: User, state: FSMContext, settings: Settings
+) -> None:
     await state.clear()
-    text, markup = await profile_view(session, db_user)
+    text, markup = await profile_view(session, db_user, settings)
     await safe_answer(call)
     await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data == "menu:remind:toggle")
+async def reminders_toggle(
+    call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings
+) -> None:
+    db_user.reminders_enabled = not db_user.reminders_enabled
+    text, markup = await profile_view(session, db_user, settings)
+    await safe_answer(call, "Напоминания включены" if db_user.reminders_enabled else "Напоминания выключены")
+    await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data == "remind:off")
+async def reminders_off(call: CallbackQuery, db_user: User) -> None:
+    db_user.reminders_enabled = False
+    await safe_answer(call, "Напоминания выключены")
+    await safe_edit(call.message, texts.reminders_off(), keyboards.back_home())
 
 
 @router.callback_query(F.data.startswith("menu:history:"))

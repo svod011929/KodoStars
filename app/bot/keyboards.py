@@ -65,10 +65,20 @@ def back_home(*extra_rows: list) -> InlineKeyboardMarkup:
     return markup(*extra_rows, [button("В меню", "menu:home", icon="home")])
 
 
-def profile_menu() -> InlineKeyboardMarkup:
+def profile_menu(reminders: bool | None = None) -> InlineKeyboardMarkup:
+    """``reminders`` is the user's opt-in state, or ``None`` when reminders are off bot-wide."""
+    rows = [[button("История", "menu:history:0", icon="scroll"), button("Мои заявки", "wd:list", icon="doc")]]
+    if reminders is not None:
+        label, icon = ("Напоминания: вкл", "bell") if reminders else ("Напоминания: выкл", "off")
+        rows.append([button(label, "menu:remind:toggle", icon=icon)])
+    rows.append([button("В меню", "menu:home", icon="home")])
+    return markup(*rows)
+
+
+def reminder_menu() -> InlineKeyboardMarkup:
     return markup(
-        [button("История", "menu:history:0", icon="scroll"), button("Мои заявки", "wd:list", icon="doc")],
-        [button("В меню", "menu:home", icon="home")],
+        [button("Забрать награду", "daily:claim", icon="gift")],
+        [button("Не напоминать", "remind:off", icon="off"), button("В меню", "menu:home", icon="home")],
     )
 
 

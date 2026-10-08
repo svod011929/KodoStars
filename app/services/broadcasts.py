@@ -12,20 +12,16 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Protocol
+from functools import partial
+from typing import Protocol, assert_never
 
 import structlog
-from aiogram.exceptions import (
-    TelegramBadRequest,
-    TelegramForbiddenError,
-    TelegramNotFound,
-    TelegramRetryAfter,
-)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.db.models import Broadcast, BroadcastAudience, BroadcastStatus, User
+from app.db.models import Broadcast, BroadcastAudience, BroadcastStatus
 from app.services import users as user_service
+from app.services.delivery import Delivery, deliver
 from app.services.errors import NotFound, ValidationError
 
 log = structlog.get_logger("kodostars.broadcast")
@@ -194,35 +190,17 @@ class BroadcastRunner:
         outcome: SendOutcome,
         blocked_ids: list[int],
     ) -> None:
-        for _attempt in range(3):
-            try:
-                await self._sender(chat_id, broadcast)
+        result = await deliver(partial(self._sender, chat_id, broadcast), chat_id=chat_id)
+        match result:
+            case Delivery.SENT:
                 outcome.sent += 1
-                return
-            except TelegramRetryAfter as exc:
-                await asyncio.sleep(exc.retry_after + 0.5)
-                continue
-            except TelegramForbiddenError:
+            case Delivery.BLOCKED:
                 outcome.blocked += 1
                 blocked_ids.append(chat_id)
-                return
-            except TelegramNotFound:
-                outcome.blocked += 1
-                blocked_ids.append(chat_id)
-                return
-            except TelegramBadRequest as exc:
-                message = str(exc).lower()
-                if "chat not found" in message or "deactivated" in message:
-                    outcome.blocked += 1
-                    blocked_ids.append(chat_id)
-                else:
-                    outcome.failed += 1
-                return
-            except Exception:
-                log.warning("broadcast_send_error", chat_id=chat_id, exc_info=True)
+            case Delivery.FAILED:
                 outcome.failed += 1
-                return
-        outcome.failed += 1
+            case _:
+                assert_never(result)
 
     async def _persist(
         self,
@@ -244,11 +222,7 @@ class BroadcastRunner:
                 broadcast.status = status
                 broadcast.finished_at = datetime.now(UTC)
                 broadcast.error = error
-            now = datetime.now(UTC)
-            for uid in blocked_ids:
-                user = await session.get(User, uid)
-                if user is not None and user.blocked_bot_at is None:
-                    user.blocked_bot_at = now
+            await user_service.mark_blocked(session, blocked_ids)
             await session.commit()
             snapshot = broadcast
         watcher = self._watchers.get(broadcast_id)

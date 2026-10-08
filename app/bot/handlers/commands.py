@@ -34,9 +34,11 @@ async def cmd_menu(
 
 
 @router.message(Command("profile"))
-async def cmd_profile(message: Message, session: AsyncSession, db_user: User, state: FSMContext) -> None:
+async def cmd_profile(
+    message: Message, session: AsyncSession, db_user: User, state: FSMContext, settings: Settings
+) -> None:
     await state.clear()
-    text, markup = await profile_view(session, db_user)
+    text, markup = await profile_view(session, db_user, settings)
     await message.answer(text, reply_markup=markup)
 
 

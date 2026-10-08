@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, Router
 from aiogram.types import Update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -90,6 +90,7 @@ class BotHarness:
         self.tg.member_status.clear()
         self.tg.fail_refunds = False
         self.tg.fail_send_gift = False
+        self.tg.blocked_chats.clear()
         gifts_service.invalidate_cache()
         brand.apply_bot_name("KodoStars")
 
@@ -153,3 +154,13 @@ async def harness() -> AsyncIterator[BotHarness]:
     await runner.shutdown()
     await bot.session.close()
     await engine.dispose()
+    _detach_routers(dp)
+
+
+def _detach_routers(router: Router) -> None:
+    """Routers are module-level singletons and refuse a second parent, so free the
+    whole tree for the next test module's dispatcher."""
+    for child in list(router.sub_routers):
+        _detach_routers(child)
+        child._parent_router = None
+    router.sub_routers.clear()

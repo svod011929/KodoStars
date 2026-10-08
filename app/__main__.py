@@ -12,6 +12,7 @@ from app.bot import brand
 from app.bot.commands import setup_commands
 from app.bot.factory import create_bot, create_dispatcher, make_broadcast_sender
 from app.bot.notify import Notifier
+from app.bot.scheduler import EngagementScheduler
 from app.config import get_settings
 from app.db.migrate import run_migrations
 from app.db.seed import seed_catalog
@@ -113,6 +114,10 @@ async def run() -> None:
                 hint="Задайте WEB_PUBLIC_URL (HTTPS-адрес панели), чтобы включить антитвинк Mini App.",
             )
 
+    scheduler = EngagementScheduler(bot, session_factory, settings_store)
+    if not settings.is_placeholder_token:
+        scheduler.start()
+
     log.info("starting_polling", bot=bot_username, placeholder_token=settings.is_placeholder_token)
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
@@ -127,6 +132,7 @@ async def run() -> None:
         else:
             raise
     finally:
+        await scheduler.shutdown()
         if web_server is not None:
             await web_server.stop()
         await broadcast_runner.shutdown()

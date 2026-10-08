@@ -164,6 +164,7 @@ class User(Base):
     __table_args__ = (
         Index("ix_users_created_at", "created_at"),
         Index("ix_users_last_action_at", "last_action_at"),
+        Index("ix_users_last_daily_on", "last_daily_on"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -187,6 +188,8 @@ class User(Base):
     last_op_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     blocked_bot_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reminders_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    last_reminded_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Anti-multiaccount (device verification through the Mini App).
     device_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     device_fp: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)

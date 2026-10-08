@@ -365,6 +365,24 @@ def daily_wait() -> str:
     return "Сегодня уже забрано. Возвращайтесь завтра — серия вырастет."
 
 
+def daily_reminder(preview: DailyPreview, live_streak: int) -> str:
+    if live_streak > 0:
+        return (
+            f"🔥 <b>Серия {live_streak} дн. сгорит через {fmt_duration(preview.seconds_until_reset)}</b>\n\n"
+            f"Забери ежедневку: ≈{preview.estimated_reward} {STAR}, "
+            f"серия станет {preview.streak_if_claimed} дн."
+        )
+    return (
+        "🎁 <b>Ежедневная награда ждёт</b>\n\n"
+        f"Сегодня: ≈{preview.estimated_reward} {STAR}. "
+        "Забирай каждый день — с серией награда растёт."
+    )
+
+
+def reminders_off() -> str:
+    return "🔕 Напоминания о ежедневке выключены. Включить снова можно в профиле."
+
+
 def tasks_header(done: int, total: int) -> str:
     return (
         "📋 <b>Задания</b>\n\n"
