@@ -12,6 +12,7 @@ from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
+from app.services import ambassadors
 
 _SKIP_PREFIXES = (
     "op:",
@@ -64,7 +65,8 @@ class OpGateMiddleware(BaseMiddleware):
         # Verified → PiarFlow then Tgrass; unverified → Tgrass only (no hard device gate).
         result = await self._gate.enforce(ctx, session, settings=settings, user=user)
         if not result.allowed:
-            await _reply_blocked(inner, result, l1_bonus=settings.referral_l1_bonus)
+            terms = await ambassadors.effective_referral_terms(session, user.id, settings)
+            await _reply_blocked(inner, result, l1_bonus=terms.l1_bonus)
             return None
 
         user.last_op_ok_at = datetime.now(UTC)

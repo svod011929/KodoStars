@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import unquote
 
 import pytest
 from aiogram.enums import ChatMemberStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.handlers.cabinet import referrals_view
+from app.bot.render import render_home
 from app.config import Settings
 from app.db.models import (
     AmbassadorKind,
@@ -188,6 +191,37 @@ async def test_referral_bonus_uses_ambassador_terms(session: AsyncSession, setti
     )
     entry = result.scalar_one()
     assert entry.amount == 77
+
+
+@pytest.mark.asyncio
+async def test_screens_advertise_ambassador_terms(session: AsyncSession, settings: Settings) -> None:
+    user = User(id=110, first_name="Amb")
+    session.add(user)
+    await session.flush()
+    slot = await amb.submit_application(
+        session, user=user, kind="channel", title="C", invite_link="https://t.me/amb110"
+    )
+    await amb.approve_slot(
+        session,
+        slot_id=slot.id,
+        admin_id=1,
+        l1_bonus=42,
+        l1_percent=31,
+        l2_bonus=7,
+        l2_percent=9,
+        promo_reward=5,
+        promo_max_uses=10,
+    )
+    await session.commit()
+
+    home, menu = await render_home(session, user, bot_username="bot", is_admin=False, settings=settings)
+    assert "🔥 <b>42 " in home
+    assert menu.inline_keyboard[0][0].text == "42 за друга"
+
+    body, markup = await referrals_view(session, user, settings, "bot")
+    assert "За друга (L1): <b>42" in body and "<b>31%</b>" in body
+    assert "<b>7" in body and "<b>9%</b>" in body
+    assert "42" in unquote(markup.inline_keyboard[0][0].url)
 
 
 @pytest.mark.asyncio

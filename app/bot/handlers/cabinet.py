@@ -8,7 +8,7 @@ from app.bot.render import render_home
 from app.bot.utils import PAGE_SIZE, button, parse_id, safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import BoostProduct, User
-from app.services import leaderboard, ledger, referrals, withdrawals
+from app.services import ambassadors, leaderboard, ledger, referrals, withdrawals
 from app.services.boosts import active_boosts
 from app.services.levels import info_for_xp
 from app.services.referrals import referral_link
@@ -69,25 +69,28 @@ async def menu_history(call: CallbackQuery, session: AsyncSession, db_user: User
     )
 
 
+async def referrals_view(
+    session: AsyncSession, user: User, settings: Settings, bot_username: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    link = referral_link(bot_username, user.id)
+    terms = await ambassadors.effective_referral_terms(session, user.id, settings)
+    stats = await referrals.referral_stats(session, user.id)
+    activated = await referrals.activated_invite_count(session, user.id)
+    earned = await referrals.referral_earnings(session, user.id)
+    rank = await leaderboard.user_rank_by_referrals(session, user.id)
+    recent = await referrals.list_referrals(session, user.id, level=1, limit=5)
+    text = texts.referrals(user, link, stats, activated, earned, rank, settings, recent, terms=terms)
+    share = texts.share_text(link, settings.signup_bonus, terms.l1_bonus)
+    return text, keyboards.referrals_menu(link, share)
+
+
 @router.callback_query(F.data == "menu:refs")
 async def menu_refs(
     call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings, bot_username: str
 ) -> None:
-    link = referral_link(bot_username, db_user.id)
-    stats = await referrals.referral_stats(session, db_user.id)
-    activated = await referrals.activated_invite_count(session, db_user.id)
-    earned = await referrals.referral_earnings(session, db_user.id)
-    rank = await leaderboard.user_rank_by_referrals(session, db_user.id)
-    recent = await referrals.list_referrals(session, db_user.id, level=1, limit=5)
+    text, markup = await referrals_view(session, db_user, settings, bot_username)
     await safe_answer(call)
-    await safe_edit(
-        call.message,
-        texts.referrals(db_user, link, stats, activated, earned, rank, settings, recent),
-        keyboards.referrals_menu(
-            link,
-            texts.share_text(link, settings.signup_bonus, settings.referral_l1_bonus),
-        ),
-    )
+    await safe_edit(call.message, text, markup)
 
 
 @router.callback_query(F.data.startswith("menu:top:"))

@@ -15,7 +15,7 @@ from app.config import Settings
 from app.db.models import User
 from app.op.base import OpContext, OpResult
 from app.op.gate import OpGate
-from app.services import botohub_views, campaigns, greetings, referrals, users
+from app.services import ambassadors, botohub_views, campaigns, greetings, referrals, users
 from app.services import promo as promo_service
 from app.services.antifraud import bump_activity
 from app.services.errors import EconomyError
@@ -50,9 +50,10 @@ async def _gate_op(
     result = await op_gate.enforce(ctx, session, verify=verify, settings=settings, user=user)
     if result.allowed:
         return "ok", None, None, result
+    terms = await ambassadors.effective_referral_terms(session, user.id, settings)
     return (
         "op",
-        texts.op_blocked(result.provider, result.message, l1_bonus=settings.referral_l1_bonus),
+        texts.op_blocked(result.provider, result.message, l1_bonus=terms.l1_bonus),
         keyboards.op_keyboard(result.sponsors),
         result,
     )

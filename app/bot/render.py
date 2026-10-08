@@ -5,7 +5,7 @@ from app.bot import keyboards, texts
 from app.bot.utils import fmt_dt
 from app.config import Settings
 from app.db.models import User
-from app.services import ledger, withdrawals
+from app.services import ambassadors, ledger, withdrawals
 from app.services.boosts import active_boosts
 from app.services.devices import is_device_ok
 from app.services.levels import info_for_xp
@@ -43,6 +43,7 @@ async def render_home(
         notice = texts.device_notice(settings.device_check_for_withdraw)
     elif user.is_twink and settings.twink_block_referral:
         notice = texts.device_twink_notice()
+    terms = await ambassadors.effective_referral_terms(session, user.id, settings)
     text = texts.home(
         user,
         balance,
@@ -52,6 +53,6 @@ async def render_home(
         boost_until,
         referral_link(bot_username, user.id),
         device_notice=notice,
-        l1_bonus=settings.referral_l1_bonus,
+        l1_bonus=terms.l1_bonus,
     )
-    return text, keyboards.main_menu(is_admin, device_url=device_url, l1_bonus=settings.referral_l1_bonus)
+    return text, keyboards.main_menu(is_admin, device_url=device_url, l1_bonus=terms.l1_bonus)

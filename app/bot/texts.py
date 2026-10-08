@@ -22,6 +22,7 @@ from app.db.models import (
     UserBoost,
     Withdrawal,
 )
+from app.services.ambassadors import ReferralTerms
 from app.services.channels import parse_channel_entry
 from app.services.daily import DailyPreview
 from app.services.leaderboard import LeaderRow
@@ -274,20 +275,19 @@ def referrals(
     rank: int | None,
     settings: Settings,
     recent: Sequence[User],
+    *,
+    terms: ReferralTerms,
 ) -> str:
     lines = [
-        f"🔥 <b>{settings.referral_l1_bonus} {STAR} за друга</b>",
+        f"🔥 <b>{terms.l1_bonus} {STAR} за друга</b>",
         "Одна ссылка. Друг заходит по ней и становится активным — бонус твой.",
         "",
         "<b>Что ещё капает</b>",
-        f"• За друга (L1): <b>{settings.referral_l1_bonus} {STAR}</b> после активации + "
-        f"<b>{settings.referral_l1_percent}%</b> с его заработка.",
+        f"• За друга (L1): <b>{terms.l1_bonus} {STAR}</b> после активации + "
+        f"<b>{terms.l1_percent}%</b> с его заработка.",
     ]
     if settings.referral_levels >= 2:
-        lines.append(
-            f"• За друга друга (L2): <b>{settings.referral_l2_bonus} {STAR}</b> + "
-            f"<b>{settings.referral_l2_percent}%</b>."
-        )
+        lines.append(f"• За друга друга (L2): <b>{terms.l2_bonus} {STAR}</b> + <b>{terms.l2_percent}%</b>.")
     lines += [
         "",
         "<b>Когда друг считается активным</b>",
