@@ -17,7 +17,6 @@ from app.config import (
 )
 from app.db.models import (
     AMBASSADOR_KIND_LABELS,
-    AMBASSADOR_STATUS_LABELS,
     BROADCAST_AUDIENCE_LABELS,
     TASK_KIND_LABELS,
     Admin,

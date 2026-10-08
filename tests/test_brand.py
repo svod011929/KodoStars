@@ -1,7 +1,9 @@
 """Bot display name: live override + ``{bot}`` placeholder expansion."""
 
-from app.bot import brand
-from app.bot import texts
+from app.bot import brand, texts
+from app.bot import emoji as pe
+from app.db.models import User
+from app.services.levels import LevelInfo
 
 
 def _reset() -> None:
@@ -46,9 +48,6 @@ def test_expand_replaces_bot_placeholder() -> None:
 
 
 def test_home_and_share_use_live_bot_name() -> None:
-    from app.db.models import User
-    from app.services.levels import LevelInfo
-
     brand.apply_bot_name("AcmeStars")
     user = User(id=1, first_name="Dan", xp=0)
     level = LevelInfo(level=1, min_xp=0, multiplier_bp=100, next_level=2, next_xp=100)
@@ -80,8 +79,6 @@ def test_home_and_share_use_live_bot_name() -> None:
 
 
 def test_premiumize_expands_bot_placeholder() -> None:
-    from app.bot import emoji as pe
-
     brand.apply_bot_name("LiveBot")
     out = pe.premiumize("Привет из {bot}")
     assert "LiveBot" in out

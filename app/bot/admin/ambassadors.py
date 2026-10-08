@@ -58,7 +58,7 @@ async def amb_list(call: CallbackQuery, session: AsyncSession, state: FSMContext
     slots = await amb_service.list_by_status(session, AmbassadorStatus.APPROVED.value)
     await safe_answer(call)
     if not slots:
-        text, markup = await _hub(session)
+        _text, markup = await _hub(session)
         await safe_edit(call.message, texts.ambassadors_empty("одобренные"), markup)
         return
     await safe_edit(call.message, "Одобренные слоты:", kb.ambassadors_list(slots))

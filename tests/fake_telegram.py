@@ -14,6 +14,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
 from aiogram.enums import ParseMode, StickerType
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import (
     AnswerCallbackQuery,
     AnswerPreCheckoutQuery,
@@ -207,8 +208,6 @@ class FakeSession(BaseSession):
             return Gifts(gifts=list(TEST_GIFTS))
         if isinstance(method, SendGift):
             if self.fail_send_gift:
-                from aiogram.exceptions import TelegramBadRequest
-
                 raise TelegramBadRequest(method=method, message="BALANCE_TOO_LOW")
             return True
         if isinstance(method, RefundStarPayment):

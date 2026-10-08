@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
+from aiogram.enums import ChatMemberStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.db.models import AmbassadorKind, AmbassadorStatus, AmbassadorSlot, User
+from app.db.models import (
+    AmbassadorKind,
+    AmbassadorSlot,
+    AmbassadorStatus,
+    LedgerEntry,
+    LedgerKind,
+    ReferralEdge,
+    User,
+)
 from app.services import ambassadors as amb
+from app.services import referrals
+from app.services.errors import ValidationError
 
 
 @pytest.mark.asyncio
@@ -82,8 +95,6 @@ def test_normalize_invite_link() -> None:
 
 @pytest.mark.asyncio
 async def test_submit_approve_claim_daily_and_revoke(session: AsyncSession, settings: Settings) -> None:
-    from app.services.errors import ValidationError
-
     user = User(id=10, first_name="A")
     session.add(user)
     await session.flush()
@@ -135,9 +146,6 @@ async def test_submit_approve_claim_daily_and_revoke(session: AsyncSession, sett
 
 @pytest.mark.asyncio
 async def test_referral_bonus_uses_ambassador_terms(session: AsyncSession, settings: Settings) -> None:
-    from app.db.models import LedgerEntry, LedgerKind, ReferralEdge
-    from app.services import referrals
-
     settings.referral_min_piarflow_subs = 0
     settings.device_check_enabled = False
     settings.min_referral_activity = 0
@@ -184,11 +192,6 @@ async def test_referral_bonus_uses_ambassador_terms(session: AsyncSession, setti
 
 @pytest.mark.asyncio
 async def test_publish_promo_requires_admin(session: AsyncSession, settings: Settings) -> None:
-    from unittest.mock import AsyncMock, MagicMock
-
-    from aiogram.enums import ChatMemberStatus
-    from app.services.errors import ValidationError
-
     user = User(id=10, first_name="A")
     session.add(user)
     await session.flush()

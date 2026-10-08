@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app.db.models import FraudEvent, LedgerKind, ReferralEdge, User
-from app.services import ledger, referrals
+from app.services import ledger, piarflow_quality, referrals
 from app.services.antifraud import bump_activity
 
 
@@ -123,8 +123,6 @@ async def test_attach_is_idempotent_when_edge_exists_without_referred_by(session
 
 @pytest.mark.asyncio
 async def test_bonus_requires_piarflow_paid_subs(session, settings) -> None:
-    from app.services import piarflow_quality
-
     gated = settings.model_copy(update={"referral_min_piarflow_subs": 2, "min_referral_activity": 1})
     referrer = await _make_user(session, 60)
     referee = await _make_user(session, 61)

@@ -2,6 +2,7 @@
 
 from app.bot import texts
 from app.config import Settings
+from app.db.models import User
 
 
 def _settings(**overrides) -> Settings:
@@ -28,8 +29,6 @@ def test_referral_activation_rules_checklist() -> None:
 
 
 def test_referral_screen_has_sections() -> None:
-    from app.db.models import User
-
     settings = _settings()
     user = User(id=1, first_name="A")
     body = texts.referrals(

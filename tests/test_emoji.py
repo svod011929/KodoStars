@@ -1,11 +1,14 @@
 """Premium emoji helpers and button icon stripping."""
 
 import pytest
+from aiogram.enums import MessageEntityType
+from aiogram.types import Chat, Message, MessageEntity, User
 
 from app.bot import emoji as pe
+from app.bot import texts
 from app.bot.utils import button, url_button
 from app.config import Settings
-from app.services.app_settings import parse_value
+from app.services.app_settings import RuntimeSettingsStore, extract_currency_from_message, parse_value
 from app.services.errors import ValidationError
 
 
@@ -58,8 +61,6 @@ def test_currency_override_changes_star_and_premiumize() -> None:
 
 
 def test_star_proxy_reads_live_override() -> None:
-    from app.bot import texts
-
     pe.apply_currency("1111111111111111111", "💫")
     assert "1111111111111111111" in str(texts.STAR)
     assert "💫" in str(texts.STAR)
@@ -85,10 +86,6 @@ def test_settings_currency_defaults() -> None:
 
 
 def test_extract_currency_from_custom_emoji_message() -> None:
-    from aiogram.enums import MessageEntityType
-    from aiogram.types import Chat, Message, MessageEntity, User
-    from app.services.app_settings import extract_currency_from_message
-
     msg = Message(
         message_id=1,
         date=0,
@@ -110,9 +107,6 @@ def test_extract_currency_from_custom_emoji_message() -> None:
 
 
 def test_extract_currency_from_plain_text_id() -> None:
-    from aiogram.types import Chat, Message, User
-    from app.services.app_settings import extract_currency_from_message
-
     msg = Message(
         message_id=1,
         date=0,
@@ -127,8 +121,6 @@ def test_extract_currency_from_plain_text_id() -> None:
 
 @pytest.mark.asyncio
 async def test_set_currency_pair_updates_id_and_fallback(session, settings) -> None:
-    from app.services.app_settings import RuntimeSettingsStore
-
     store = RuntimeSettingsStore(settings)
     saved = await store.set_currency_pair(
         session,

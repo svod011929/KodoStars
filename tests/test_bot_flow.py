@@ -14,6 +14,7 @@ from aiogram.methods import (
 )
 from sqlalchemy import select
 
+from app.bot import brand
 from app.db.models import (
     Broadcast,
     BroadcastStatus,
@@ -23,6 +24,8 @@ from app.db.models import (
     Withdrawal,
     WithdrawalStatus,
 )
+from app.op.base import OpResult, Sponsor
+from app.op.tgrass import TgrassAdapter
 from app.services import devices, ledger, payments, promo, referrals
 from app.services.fragment import FragmentPurchase
 from tests.conftest import ADMIN_ID, OTHER_ID, USER_ID, BotHarness
@@ -86,9 +89,6 @@ async def test_op_gate_unverified_skips_piarflow_allows_tgrass_skip(harness: Bot
 
 @pytest.mark.asyncio
 async def test_op_gate_unverified_shows_tgrass_sponsors(harness: BotHarness, monkeypatch) -> None:
-    from app.op.base import OpResult, Sponsor
-    from app.op.tgrass import TgrassAdapter
-
     h = harness
     h.settings.web_public_url = "https://mini.example"
     h.settings.device_check_for_op = True
@@ -420,8 +420,6 @@ async def test_runtime_settings_and_maintenance(harness: BotHarness) -> None:
 
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:on"))
     await h.feed(callback_update(USER_ID, "menu:daily"))
-    from app.bot import brand
-
     expanded = brand.expand(h.settings.maintenance_text) or h.settings.maintenance_text
     assert expanded[:20] in h.tg.alerts()[-1]
     await h.feed(message_update(USER_ID, "/menu"))

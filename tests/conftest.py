@@ -17,10 +17,10 @@ from app.db.models import Base
 from app.db.seed import seed_catalog
 from app.db.session import create_engine
 from app.op.gate import OpGate
+from app.services import gifts as gifts_service
 from app.services.access import AccessRegistry
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.broadcasts import BroadcastRunner
-from app.services import gifts as gifts_service
 from tests.fake_telegram import BOT_USERNAME, FakeSession, make_bot
 
 ADMIN_ID = 1

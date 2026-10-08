@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.models import (
     AmbassadorKind,
-    AmbassadorStatus,
     AmbassadorSlot,
+    AmbassadorStatus,
     PromoCode,
     User,
 )
