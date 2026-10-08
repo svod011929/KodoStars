@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -174,3 +175,30 @@ async def test_failed_ad_releases_the_cooldown(monkeypatch: pytest.MonkeyPatch) 
     settings = _settings()
     assert await botohub_views.maybe_send_ad(12, settings) is False
     assert await botohub_views.maybe_send_ad(12, settings) is True
+
+
+@pytest.mark.asyncio
+async def test_slow_failed_ad_keeps_a_newer_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(botohub_views, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    calls = 0
+    release_first = asyncio.Event()
+
+    async def fake_post(*_a: Any, **_k: Any) -> tuple[int, dict]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await release_first.wait()
+            return 200, {"SendPostResult": 8}
+        return 200, {"SendPostResult": 1}
+
+    monkeypatch.setattr(botohub_views.op_http, "post_json", fake_post)
+    settings = _settings(botohub_views_cooldown_seconds=60)
+    slow = asyncio.create_task(botohub_views.maybe_send_ad(13, settings))
+    await asyncio.sleep(0)
+    clock[0] += 61
+    assert await botohub_views.maybe_send_ad(13, settings) is True
+    release_first.set()
+    assert await asyncio.wait_for(slow, timeout=2) is False
+    assert await botohub_views.maybe_send_ad(13, settings) is False
+    assert calls == 2

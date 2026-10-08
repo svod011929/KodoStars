@@ -46,14 +46,20 @@ def clear_ad_cooldowns() -> None:
     _last_ad_mono.clear()
 
 
-def _note_ad_shown(user_id: int) -> None:
-    _last_ad_mono[user_id] = time.monotonic()
+def _note_ad_shown(user_id: int) -> float:
+    mark = time.monotonic()
+    _last_ad_mono[user_id] = mark
     _last_ad_mono.move_to_end(user_id)
     while len(_last_ad_mono) > _MAX_AD_TRACKED:
         _last_ad_mono.popitem(last=False)
+    return mark
 
 
-def _restore_ad_mark(user_id: int, previous: float | None) -> None:
+def _restore_ad_mark(user_id: int, mark: float, previous: float | None) -> None:
+    # A slow failed request must not erase the mark of an impression that
+    # started (and maybe succeeded) after it.
+    if _last_ad_mono.get(user_id) != mark:
+        return
     if previous is None:
         _last_ad_mono.pop(user_id, None)
     else:
@@ -126,10 +132,10 @@ async def maybe_send_ad(user_id: int, settings: Settings) -> bool:
     # Claim the cooldown before the request: two earn taps in a row would
     # otherwise both pass the check while the first impression is in flight.
     previous = _last_ad_mono.get(user_id)
-    _note_ad_shown(user_id)
+    mark = _note_ad_shown(user_id)
     ok = await send_post(user_id, settings, hi=False)
     if not ok:
-        _restore_ad_mark(user_id, previous)
+        _restore_ad_mark(user_id, mark, previous)
     return ok
 
 
