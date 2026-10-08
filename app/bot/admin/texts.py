@@ -894,7 +894,7 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
         f"Сейчас: <code>{h(format_value(current))}</code>"
         f"{' (переопределено)' if overridden else ''}\n"
         f"Из .env: <code>{h(format_value(default))}</code>\n\n"
-        f"Отправьте новое значение ({hint})."
+        f"Отправьте новое значение ({h(hint)})."
     )
 
 

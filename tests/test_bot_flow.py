@@ -17,6 +17,7 @@ from aiogram.types import User as TgUser
 from sqlalchemy import select
 
 from app.bot import brand
+from app.config import RUNTIME_OVERRIDABLE, SETTINGS_GROUPS
 from app.db.models import (
     Broadcast,
     BroadcastStatus,
@@ -511,6 +512,17 @@ async def test_runtime_settings_and_maintenance(harness: BotHarness) -> None:
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:reset"))
     await h.feed(message_update(USER_ID, "/menu"))
     assert "KodoStars" in h.tg.last_text(USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_every_settings_screen_opens(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, ADMIN_ID)
+    for group in SETTINGS_GROUPS:
+        await h.feed(callback_update(ADMIN_ID, f"admin:set:g:{group}"))
+    for key in RUNTIME_OVERRIDABLE:
+        await h.feed(callback_update(ADMIN_ID, f"admin:set:{key}"))
+        assert f"<code>{key}</code>" in h.tg.last_text(ADMIN_ID)
 
 
 @pytest.mark.asyncio
