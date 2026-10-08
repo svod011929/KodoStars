@@ -35,6 +35,21 @@ def test_premiumize_wraps_emoji_next_to_existing_tags() -> None:
     assert pe.premiumize(out) == out
 
 
+def test_premiumize_only_touches_text_telegram_lets_it_change() -> None:
+    fire = '<tg-emoji emoji-id="6041731551845159060">🔥</tg-emoji>'
+    gift = pe.html("gift")
+    source = (
+        '<a href="https://x.y/🔥?q=🎁">ссылка 🔥</a> · <code>🔥</code> · <pre><code class="language-x">🎁</code></pre>'
+        " · <b>🔥 <i>🎁</i></b> · <blockquote>🎁</blockquote>"
+    )
+    out = pe.premiumize(source)
+    assert out.startswith('<a href="https://x.y/🔥?q=🎁">ссылка 🔥</a> · <code>🔥</code> · ')
+    assert '<pre><code class="language-x">🎁</code></pre>' in out
+    assert f"<b>{fire} <i>{gift}</i></b>" in out and f"<blockquote>{gift}</blockquote>" in out
+    assert pe.premiumize(out) == out
+    assert pe.premiumize("<CODE>🔥</CODE> 🔥") == f"<CODE>🔥</CODE> {fire}"
+
+
 def test_premiumize_leaves_overridden_currency_fallback_inside_tag() -> None:
     pe.apply_currency("6032644646587338669", "🎁")
     out = pe.premiumize(f"Награда {pe.currency()} и подарок 🎁")
