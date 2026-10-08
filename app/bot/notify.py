@@ -132,7 +132,6 @@ class Notifier:
             case "contest_settled":
                 text = admin_texts.contest_settled(
                     payload["week"],
-                    payload["status"],
                     payload["winners"],
                     min_referrals=payload["min_referrals"],
                     paid_total=payload["paid_total"],

@@ -627,7 +627,9 @@ class CampaignHit(Base):
 class Contest(Base):
     """Weekly referral race, one row per ISO week; settled once after ``ends_at``.
 
-    ``prizes`` and ``min_referrals`` are the terms in force when the week was settled.
+    ``prizes`` and ``min_referrals`` follow the settings while the week runs and are
+    what the week pays. ``starts_at`` is later than Monday 00:00 when the contest was
+    switched on mid-week.
     """
 
     __tablename__ = "contests"

@@ -104,15 +104,14 @@ class EngagementScheduler:
 
     async def _run_contest(self, now: datetime, settings: Settings) -> tuple[str, ...]:
         async with self._factory() as session:
-            settled = await contests.settle_due(session, now=now, settings=settings)
-            await contests.open_week(session, now=now, settings=settings)
+            settled = await contests.settle_due(session, now=now)
+            await contests.sync_week(session, now=now, settings=settings)
             await session.commit()
             pending = events.drain(session)
         for results in settled:
             log.info(
                 "contest_settled",
                 week=results.contest.week_key,
-                status=results.contest.status,
                 winners=len(results.winners),
                 paid=results.contest.paid_total,
             )

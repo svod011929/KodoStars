@@ -12,7 +12,7 @@ from app.bot.admin.states import AdminFSM
 from app.bot.utils import safe_answer, safe_edit
 from app.config import RUNTIME_OVERRIDABLE, SETTINGS_GROUPS, Settings
 from app.op.gate import CASCADE, enabled_providers, provider_configured, toggle_provider
-from app.services import audit
+from app.services import audit, contests
 from app.services.app_settings import RuntimeSettingsStore, extract_currency_from_message
 from app.services.errors import EconomyError
 
@@ -90,6 +90,13 @@ async def _apply_setting(
     await audit.log_action(
         session, admin_id=admin_id, action="settings.set", target_type="setting", target_id=key, value=value
     )
+    await _sync_contest(session, store, key)
+
+
+async def _sync_contest(session: AsyncSession, store: RuntimeSettingsStore, key: str) -> None:
+    # The running week's row decides what is shown and paid, so it follows at once.
+    if key in contests.SETTING_KEYS:
+        await contests.sync_week(session, now=contests.utc_now(), settings=await store.effective(session))
 
 
 @router.callback_query(F.data.regexp(r"^admin:set:(\w+):(on|off|reset)$"))
@@ -111,6 +118,7 @@ async def setting_quick(
                 target_type="setting",
                 target_id=key,
             )
+            await _sync_contest(session, settings_store, key)
         else:
             await _apply_setting(
                 session, settings_store, key, "true" if action == "on" else "false", call.from_user.id

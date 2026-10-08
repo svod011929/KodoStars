@@ -15,6 +15,7 @@ from app.db.models import (
     LEDGER_KIND_LABELS,
     WITHDRAWAL_STATUS_LABELS,
     AmbassadorStatus,
+    Contest,
     LedgerEntry,
     PromoCode,
     Task,
@@ -25,7 +26,7 @@ from app.db.models import (
 )
 from app.services.ambassadors import ReferralTerms
 from app.services.channels import parse_channel_entry
-from app.services.contests import Results, Standing
+from app.services.contests import Results, Standing, Week
 from app.services.daily import DailyPreview
 from app.services.leaderboard import LeaderRow, mask_name
 from app.services.levels import LevelInfo, format_multiplier, progress_bar
@@ -472,13 +473,15 @@ def top(rows: Sequence[LeaderRow], mode: str, my_rank: int | None) -> str:
 
 
 def contest(
+    row: Contest,
     seconds_left: int,
-    prizes: Sequence[int],
-    min_referrals: int,
     board: Sequence[Standing],
     mine: Standing | None,
     last: Results | None,
 ) -> str:
+    prizes: Sequence[int] = row.prizes or ()
+    min_referrals = row.min_referrals
+    week = Week.of(row)
     prize_line = " · ".join(f"{_place_mark(place)} {prize} {STAR}" for place, prize in enumerate(prizes, 1))
     lines = [
         "🏆 <b>Конкурс недели</b>",
@@ -499,7 +502,13 @@ def contest(
     lines += ["", _contest_me(mine, board, prizes, min_referrals)]
     if last is not None:
         lines += ["", _contest_results(last)]
-    lines += ["", "<i>Считаются друзья, активированные на этой неделе. Твинки и забаненные не в счёт.</i>"]
+    if week.full:
+        scope = "Считаются друзья, активированные на этой неделе."
+    else:
+        scope = (
+            f"Конкурс стартовал {fmt_dt(week.starts_at)} UTC — считаются друзья, активированные после старта."
+        )
+    lines += ["", f"<i>{scope} Твинки и забаненные не в счёт.</i>"]
     return "\n".join(lines)
 
 
@@ -531,8 +540,8 @@ def _contest_results(last: Results) -> str:
     return "\n".join([title, *rows])
 
 
-def contest_teaser(prizes: Sequence[int], mine: Standing | None) -> str:
-    head = f"🏆 Конкурс недели: до <b>{prizes[0]} {STAR}</b> за 1 место"
+def contest_teaser(top_prize: int, mine: Standing | None) -> str:
+    head = f"🏆 Конкурс недели: до <b>{top_prize} {STAR}</b> за 1 место"
     if mine is None:
         return f"{head} — приведи друзей и попади в таблицу."
     return f"{head} · ты <b>#{mine.place}</b> ({mine.score} {_friends(mine.score)})"

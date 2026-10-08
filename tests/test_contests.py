@@ -12,6 +12,7 @@ from app.db.models import Contest, ContestStatus, ContestWinner, ReferralEdge, U
 from app.services import contests, events, ledger
 
 WEEK = contests.week_of(datetime(2026, 10, 7, 15, 30, tzinfo=UTC))  # Wednesday, 2026-W41
+SETTLES_AT = WEEK.ends_at + contests.SETTLE_GRACE
 _friend_ids = count(10_000)
 
 
@@ -36,11 +37,26 @@ async def _friend(session, referrer_id: int, activated_at: datetime | None, **ex
     return friend
 
 
-async def _open(session, week: contests.Week = WEEK) -> Contest:
-    contest = Contest(week_key=week.key, starts_at=week.starts_at, ends_at=week.ends_at)
+async def _open(
+    session, week: contests.Week = WEEK, *, prizes: tuple[int, ...] = (100, 50, 25), minimum: int = 2
+) -> Contest:
+    contest = Contest(
+        week_key=week.key,
+        starts_at=week.starts_at,
+        ends_at=week.ends_at,
+        prizes=list(prizes),
+        min_referrals=minimum,
+    )
     session.add(contest)
     await session.flush()
     return contest
+
+
+def _enabled(settings: Settings, prizes: str = "100,50,25", minimum: int = 2) -> Settings:
+    settings.contest_enabled = True
+    settings.contest_prizes = prizes
+    settings.contest_min_referrals = minimum
+    return settings
 
 
 def test_weeks_run_monday_to_monday_utc() -> None:
@@ -56,6 +72,8 @@ def test_weeks_run_monday_to_monday_utc() -> None:
     assert contests.week_of(datetime(2026, 10, 7, 15, 30)) == WEEK  # SQLite hands back naive UTC
     assert WEEK.seconds_left(datetime(2026, 10, 11, 23, tzinfo=UTC)) == 3600
     assert WEEK.seconds_left(datetime(2026, 10, 13, tzinfo=UTC)) == 0
+    assert WEEK.full
+    assert not contests.Week(WEEK.key, _at(7), WEEK.ends_at).full
 
 
 def test_prizes_are_a_short_non_increasing_list() -> None:
@@ -120,10 +138,7 @@ async def test_ties_go_to_whoever_got_there_first(session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_settlement_pays_qualified_places_exactly_once(session, settings) -> None:
-    settings.contest_enabled = True
-    settings.contest_prizes = "100,50,25"
-    settings.contest_min_referrals = 2
+async def test_settlement_pays_qualified_places_exactly_once(session) -> None:
     for user_id in (1, 2, 3):
         await _user(session, user_id)
     for day in (5, 6, 7):
@@ -131,12 +146,10 @@ async def test_settlement_pays_qualified_places_exactly_once(session, settings) 
     for day in (6, 7):
         await _friend(session, 2, _at(day))
     await _friend(session, 3, _at(8))  # third on the board, but below the minimum
-    await _open(session)
+    await _open(session, prizes=(100, 50, 25), minimum=2)
 
-    assert (
-        await contests.settle_due(session, now=WEEK.ends_at - timedelta(seconds=1), settings=settings) == []
-    )
-    [results] = await contests.settle_due(session, now=WEEK.ends_at, settings=settings)
+    assert await contests.settle_due(session, now=SETTLES_AT - timedelta(seconds=1)) == []
+    [results] = await contests.settle_due(session, now=SETTLES_AT)
     contest = results.contest
     assert contest.status == ContestStatus.SETTLED.value and contest.settled_at is not None
     assert (contest.prizes, contest.min_referrals, contest.paid_total) == ([100, 50, 25], 2, 150)
@@ -156,7 +169,7 @@ async def test_settlement_pays_qualified_places_exactly_once(session, settings) 
         "prize": 50,
     }
 
-    assert await contests.settle_due(session, now=WEEK.ends_at + timedelta(days=3), settings=settings) == []
+    assert await contests.settle_due(session, now=WEEK.ends_at + timedelta(days=3)) == []
     assert await session.scalar(select(func.count()).select_from(ContestWinner)) == 2
     assert await ledger.get_balance(session, 1) == 100
 
@@ -168,37 +181,86 @@ async def test_settlement_pays_qualified_places_exactly_once(session, settings) 
 
 
 @pytest.mark.asyncio
-async def test_switched_off_contest_closes_without_prizes(session, settings) -> None:
+async def test_a_week_pays_the_terms_it_ran_under(session, settings) -> None:
     await _user(session, 1)
     for day in (5, 6, 7):
         await _friend(session, 1, _at(day))
-    await _open(session)
-    settings.contest_enabled = False
+    _enabled(settings, prizes="100,50", minimum=2)
+    await contests.sync_week(session, now=_at(5, 0), settings=settings)
+    _enabled(settings, prizes="80,40", minimum=3)
+    await contests.sync_week(session, now=_at(11, 23), settings=settings)
 
-    [results] = await contests.settle_due(session, now=WEEK.ends_at, settings=settings)
-    assert results.contest.status == ContestStatus.CANCELLED.value and results.winners == ()
+    # Changed after the week ended, before the scheduler got to it: does not count.
+    settings.contest_enabled = False
+    settings.contest_prizes = "5"
+    await contests.sync_week(session, now=WEEK.ends_at + timedelta(minutes=1), settings=settings)
+    [results] = await contests.settle_due(session, now=SETTLES_AT + timedelta(hours=3))
+    assert [(w.place, w.score, w.prize) for w, _ in results.winners] == [(1, 3, 80)]
+    assert (results.contest.prizes, results.contest.min_referrals) == ([80, 40], 3)
+    assert await ledger.get_balance(session, 1) == 80
+
+
+@pytest.mark.asyncio
+async def test_switching_off_cancels_the_running_week_until_switched_back_on(session, settings) -> None:
+    await _user(session, 1)
+    for day in (5, 6, 7):
+        await _friend(session, 1, _at(day))
+    opened = await contests.sync_week(session, now=_at(5, 0), settings=_enabled(settings))
+    assert opened is not None and await contests.current(session, now=_at(6), settings=settings) is opened
+
+    settings.contest_enabled = False
+    assert await contests.sync_week(session, now=_at(8), settings=settings) is None
+    assert opened.status == ContestStatus.CANCELLED.value
+    assert await contests.current(session, now=_at(8), settings=_enabled(settings)) is None
+
+    resumed = await contests.sync_week(session, now=_at(9), settings=settings)
+    assert resumed is opened and opened.status == ContestStatus.RUNNING.value
+    assert opened.starts_at.replace(tzinfo=UTC) == WEEK.starts_at
+
+    settings.contest_enabled = False
+    await contests.sync_week(session, now=_at(11, 23), settings=settings)
+    assert await contests.settle_due(session, now=SETTLES_AT) == []
     assert await ledger.get_balance(session, 1) == 0
-    assert [event.name for event in events.drain(session)] == ["contest_settled"]
+    assert events.drain(session) == []
     assert await contests.last_results(session, before=contests.week_of(WEEK.ends_at)) is None
 
 
 @pytest.mark.asyncio
-async def test_weeks_open_only_while_enabled_and_are_never_backfilled(session, settings) -> None:
+async def test_a_contest_switched_on_mid_week_counts_from_that_moment(session, settings) -> None:
     await _user(session, 1)
     for day in (1, 2, 3):  # 2026-W40, before the contest was switched on
         await _friend(session, 1, _at(day))
+    for day in (5, 6):  # this week, but before the switch
+        await _friend(session, 1, _at(day))
+    await _friend(session, 1, _at(9))
 
     settings.contest_enabled = False
-    assert await contests.open_week(session, now=_at(7), settings=settings) is None
-    settings.contest_enabled = True
-    opened = await contests.open_week(session, now=_at(7), settings=settings)
-    assert opened is await contests.open_week(session, now=_at(11, 23), settings=settings)
+    assert await contests.sync_week(session, now=_at(7), settings=settings) is None
+    assert await session.scalar(select(func.count()).select_from(Contest)) == 0
+    opened = await contests.sync_week(session, now=_at(7), settings=_enabled(settings, minimum=1))
+    assert opened is await contests.sync_week(session, now=_at(11, 23), settings=settings)
     assert opened.week_key == WEEK.key and opened.status == ContestStatus.RUNNING.value
+    week = contests.Week.of(opened)
+    assert week.starts_at == _at(7) and not week.full
+    assert [(row.user.id, row.score) for row in await contests.standings(session, week)] == [(1, 1)]
 
-    [results] = await contests.settle_due(session, now=WEEK.ends_at + timedelta(minutes=1), settings=settings)
-    assert results.contest.week_key == WEEK.key and results.winners == ()
-    assert await ledger.get_balance(session, 1) == 0
-    assert await session.scalar(select(func.count()).select_from(Contest)) == 1
+    # The next week carries on from Monday 00:00, whenever the scheduler opens it.
+    following = await contests.sync_week(session, now=WEEK.ends_at + timedelta(minutes=5), settings=settings)
+    assert contests.Week.of(following).starts_at == WEEK.ends_at
+    [results] = await contests.settle_due(session, now=WEEK.ends_at + timedelta(minutes=5))
+    assert [(w.user_id, w.score, w.prize) for w, _ in results.winners] == [(1, 1, 100)]
+    assert await session.scalar(select(func.count()).select_from(Contest)) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_settled_week_is_final(session, settings) -> None:
+    contest = await _open(session)
+    await contests.settle_due(session, now=SETTLES_AT)
+    # A process whose clock lags behind must not reopen or cancel it.
+    assert await contests.sync_week(session, now=_at(11, 23), settings=_enabled(settings)) is None
+    settings.contest_enabled = False
+    assert await contests.sync_week(session, now=_at(11, 23), settings=settings) is None
+    assert contest.status == ContestStatus.SETTLED.value
 
 
 def test_contest_screen_explains_the_race() -> None:
@@ -208,17 +270,27 @@ def test_contest_screen_explains_the_race() -> None:
     past = Contest(week_key="2026-W40", starts_at=datetime(2026, 9, 28), ends_at=datetime(2026, 10, 5))
     winner = ContestWinner(place=1, user_id=9, score=7, prize=100)
     last = contests.Results(contest=past, winners=((winner, User(id=9, username="champion")),))
+    row = Contest(
+        week_key=WEEK.key, starts_at=WEEK.starts_at, ends_at=WEEK.ends_at, prizes=[100, 50], min_referrals=2
+    )
 
-    text = texts.contest(2 * 86400 + 3600, (100, 50), 2, [leader, second, me], me, last)
+    text = texts.contest(row, 2 * 86400 + 3600, [leader, second, me], me, last)
     assert "Итоги через 2 дн 1 ч" in text
     assert "@le***e — <b>4</b> · 100" in text
     assert "Ma***a — <b>2</b> · 50" in text
     assert "Ты: <b>#3</b> · 1 друг — ещё 1 до призового минимума" in text
     assert "Итоги 28.09–04.10" in text and "@ch***n — 7 · +100" in text
+    assert "активированные на этой неделе" in text
 
-    in_prizes = texts.contest(60, (100, 50), 2, [leader, second], second, None)
+    in_prizes = texts.contest(row, 60, [leader, second], second, None)
     assert "ты в призах" in in_prizes and "Итоги 28.09" not in in_prizes
     chasing = contests.Standing(place=3, user=User(id=3, username="me"), score=2)
-    behind = texts.contest(60, (100, 50), 2, [leader, second, chasing], chasing, None)
+    behind = texts.contest(row, 60, [leader, second, chasing], chasing, None)
     assert "ещё 1 до призового места" in behind
-    assert "Тебя пока нет в таблице" in texts.contest(60, (100,), 1, [], None, None)
+    row.prizes, row.min_referrals = [100], 1
+    assert "Тебя пока нет в таблице" in texts.contest(row, 60, [], None, None)
+
+    late = Contest(
+        week_key=WEEK.key, starts_at=_at(7, 18), ends_at=WEEK.ends_at, prizes=[100], min_referrals=1
+    )
+    assert "Конкурс стартовал 07.10.2026 18:00 UTC" in texts.contest(late, 60, [], None, None)

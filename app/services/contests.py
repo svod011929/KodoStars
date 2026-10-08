@@ -1,9 +1,10 @@
 """Weekly referral contest.
 
 Referrers race for the most friends activated during an ISO week (Monday 00:00 UTC
-to the next Monday). A week takes part only if the contest was on while it ran: the
-scheduler opens a row for the running week and settles it once, after it ends, paying
-the configured prizes to the top places.
+to the next Monday). Every running week has a row that mirrors the contest switch
+and terms while the week runs (see :func:`sync_week`); the bot only shows a week
+that has a running row, and the scheduler settles that row once, shortly after the
+week ends, on the terms stored on it.
 """
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 
 from sqlalchemy import ColumnElement, Select, and_, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm.util import AliasedClass
@@ -21,6 +24,15 @@ from app.db.models import Contest, ContestStatus, ContestWinner, LedgerKind, Ref
 from app.services import events, ledger
 
 STANDINGS_LIMIT = 10
+# Activations are stamped before their transaction commits; settling a little after
+# the week ends lets the last ones land before the board is frozen.
+SETTLE_GRACE = timedelta(minutes=2)
+# Settings that change what the running week pays.
+SETTING_KEYS = frozenset({"contest_enabled", "contest_prizes", "contest_min_referrals"})
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +40,15 @@ class Week:
     key: str
     starts_at: datetime
     ends_at: datetime
+
+    @classmethod
+    def of(cls, contest: Contest) -> Week:
+        return cls(contest.week_key, _aware(contest.starts_at), _aware(contest.ends_at))
+
+    @property
+    def full(self) -> bool:
+        """``False`` when the contest was switched on after the week had started."""
+        return self.ends_at - self.starts_at >= timedelta(days=7)
 
     def seconds_left(self, now: datetime) -> int:
         return max(int((self.ends_at - now).total_seconds()), 0)
@@ -46,6 +67,10 @@ class Results:
     winners: tuple[tuple[ContestWinner, User], ...]
 
 
+def top_prize(contest: Contest) -> int:
+    return contest.prizes[0] if contest.prizes else 0
+
+
 def _aware(moment: datetime) -> datetime:
     # SQLite returns naive timestamps; everything is stored in UTC.
     return moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
@@ -57,10 +82,6 @@ def week_of(moment: datetime) -> Week:
     starts_at = datetime.combine(monday, time.min, tzinfo=UTC)
     year, number, _ = monday.isocalendar()
     return Week(key=f"{year}-W{number:02d}", starts_at=starts_at, ends_at=starts_at + timedelta(days=7))
-
-
-def _week(contest: Contest) -> Week:
-    return Week(contest.week_key, _aware(contest.starts_at), _aware(contest.ends_at))
 
 
 def _clean(user: type[User] | AliasedClass[User]) -> ColumnElement[bool]:
@@ -138,88 +159,132 @@ async def place_of(session: AsyncSession, week: Week, user_id: int) -> Standing 
     return Standing(place=int(ahead or 0) + 1, user=user, score=int(score))
 
 
-async def open_week(session: AsyncSession, *, now: datetime, settings: Settings) -> Contest | None:
-    """Open the running week while the contest is on. Past weeks are never backfilled."""
+async def current(session: AsyncSession, *, now: datetime, settings: Settings) -> Contest | None:
+    """The running week the bot shows and will pay, or ``None``."""
     if not settings.contest_enabled:
         return None
+    return await session.scalar(
+        select(Contest).where(
+            Contest.week_key == week_of(now).key, Contest.status == ContestStatus.RUNNING.value
+        )
+    )
+
+
+async def sync_week(session: AsyncSession, *, now: datetime, settings: Settings) -> Contest | None:
+    """Mirror the contest switch and terms onto the row of the week that is running.
+
+    Switching the contest off cancels the running week; switching it back on before
+    the week ends resumes it. Each change of the prizes or the minimum applies to the
+    running week, so a week pays the terms in force at the last sync before it ended.
+    Past weeks are never touched or backfilled.
+    """
     week = week_of(now)
-    contest = await session.scalar(select(Contest).where(Contest.week_key == week.key))
+    contest = await _row(session, week)
+    if contest is not None and contest.status == ContestStatus.SETTLED.value:
+        return None
+    if not settings.contest_enabled:
+        if contest is not None and contest.status == ContestStatus.RUNNING.value:
+            contest.status = ContestStatus.CANCELLED.value
+            await session.flush()
+        return None
+    prizes = list(settings.contest_prize_list)
     if contest is None:
-        contest = Contest(week_key=week.key, starts_at=week.starts_at, ends_at=week.ends_at)
-        session.add(contest)
-        await session.flush()
+        # A contest switched on mid-week races from that moment; one that simply
+        # carries on from last week starts at Monday 00:00.
+        starts_at = week.starts_at if await _carries_on(session, week) else max(week.starts_at, now)
+        # The admin panel and the scheduler can both open the week at once.
+        insert = pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
+        await session.execute(
+            insert(Contest)
+            .values(
+                week_key=week.key,
+                starts_at=starts_at,
+                ends_at=week.ends_at,
+                prizes=prizes,
+                min_referrals=settings.contest_min_referrals,
+            )
+            .on_conflict_do_nothing()
+        )
+        contest = await _row(session, week)
+        if contest is None or contest.status == ContestStatus.SETTLED.value:
+            return None
+    contest.status = ContestStatus.RUNNING.value
+    contest.prizes = prizes
+    contest.min_referrals = settings.contest_min_referrals
+    await session.flush()
     return contest
 
 
-async def settle_due(session: AsyncSession, *, now: datetime, settings: Settings) -> list[Results]:
-    """Settle every finished week that is still running, oldest first."""
+async def _row(session: AsyncSession, week: Week) -> Contest | None:
+    return await session.scalar(select(Contest).where(Contest.week_key == week.key))
+
+
+async def _carries_on(session: AsyncSession, week: Week) -> bool:
+    previous = week_of(week.starts_at - timedelta(days=1))
+    status = await session.scalar(select(Contest.status).where(Contest.week_key == previous.key))
+    return status in {ContestStatus.RUNNING.value, ContestStatus.SETTLED.value}
+
+
+async def settle_due(session: AsyncSession, *, now: datetime) -> list[Results]:
+    """Settle every running week that ended at least :data:`SETTLE_GRACE` ago, oldest first."""
     due = await session.scalars(
         select(Contest)
-        .where(Contest.status == ContestStatus.RUNNING.value, Contest.ends_at <= now)
+        .where(Contest.status == ContestStatus.RUNNING.value, Contest.ends_at <= now - SETTLE_GRACE)
         .order_by(Contest.starts_at)
     )
     settled: list[Results] = []
     for contest in due.all():
-        results = await _settle(session, contest, now=now, settings=settings)
+        results = await _settle(session, contest, now=now)
         if results is not None:
             settled.append(results)
     return settled
 
 
-async def _settle(
-    session: AsyncSession, contest: Contest, *, now: datetime, settings: Settings
-) -> Results | None:
-    # A contest switched off before the week ended pays nothing.
-    status = ContestStatus.SETTLED if settings.contest_enabled else ContestStatus.CANCELLED
+async def _settle(session: AsyncSession, contest: Contest, *, now: datetime) -> Results | None:
     claimed = await session.execute(
         update(Contest)
         .where(Contest.id == contest.id, Contest.status == ContestStatus.RUNNING.value)
-        .values(status=status.value, settled_at=now)
+        .values(status=ContestStatus.SETTLED.value, settled_at=now)
     )
     if claimed.rowcount != 1:
         return None
+    prizes = tuple(contest.prizes or ())
+    board = await standings(session, Week.of(contest), limit=len(prizes)) if prizes else []
     winners: list[tuple[ContestWinner, User]] = []
-    if status is ContestStatus.SETTLED:
-        prizes = settings.contest_prize_list
-        minimum = settings.contest_min_referrals
-        board = await standings(session, _week(contest), limit=len(prizes))
-        for standing, prize in zip(board, prizes, strict=False):
-            if standing.score < minimum:
-                break
-            await ledger.credit(
-                session,
-                user_id=standing.user.id,
-                amount=prize,
-                kind=LedgerKind.CONTEST_PRIZE,
-                reference=f"contest:{contest.week_key}:{standing.place}",
-                extra={"week": contest.week_key, "place": standing.place, "score": standing.score},
-            )
-            winner = ContestWinner(
-                contest_id=contest.id,
-                place=standing.place,
-                user_id=standing.user.id,
-                score=standing.score,
-                prize=prize,
-            )
-            session.add(winner)
-            winners.append((winner, standing.user))
-            events.emit(
-                session,
-                "contest_prize",
-                user_id=standing.user.id,
-                place=standing.place,
-                prize=prize,
-                score=standing.score,
-            )
-        contest.prizes = list(prizes)
-        contest.min_referrals = minimum
-        contest.paid_total = sum(winner.prize for winner, _ in winners)
+    for standing, prize in zip(board, prizes, strict=False):
+        if standing.score < contest.min_referrals:
+            break
+        await ledger.credit(
+            session,
+            user_id=standing.user.id,
+            amount=prize,
+            kind=LedgerKind.CONTEST_PRIZE,
+            reference=f"contest:{contest.week_key}:{standing.place}",
+            extra={"week": contest.week_key, "place": standing.place, "score": standing.score},
+        )
+        winner = ContestWinner(
+            contest_id=contest.id,
+            place=standing.place,
+            user_id=standing.user.id,
+            score=standing.score,
+            prize=prize,
+        )
+        session.add(winner)
+        winners.append((winner, standing.user))
+        events.emit(
+            session,
+            "contest_prize",
+            user_id=standing.user.id,
+            place=standing.place,
+            prize=prize,
+            score=standing.score,
+        )
+    contest.paid_total = sum(winner.prize for winner, _ in winners)
     await session.flush()
     events.emit(
         session,
         "contest_settled",
         week=contest.week_key,
-        status=status.value,
         min_referrals=contest.min_referrals,
         paid_total=contest.paid_total,
         winners=[
