@@ -12,6 +12,7 @@ from aiogram.methods import (
     SendInvoice,
     SendMessage,
 )
+from aiogram.types import Chat
 from aiogram.types import User as TgUser
 from sqlalchemy import select
 
@@ -162,6 +163,26 @@ async def test_concurrent_double_start_creates_one_referral_edge(harness: BotHar
     assert not any("Ошибка в боте" in text for text in h.tg.texts(ADMIN_ID))
     assert sum("новый друг" in text for text in h.tg.texts(ADMIN_ID)) == 1
     assert sum("KodoStars" in text for text in h.tg.texts(USER_ID)) == 2
+
+
+@pytest.mark.asyncio
+async def test_group_chat_traffic_is_ignored(harness: BotHarness) -> None:
+    """The bot is an admin in ambassadors' chats for auto-posts and sees every message there."""
+    h = harness
+    await _start(h, ADMIN_ID)
+    h.tg.clear()
+    group = Chat(id=-100500, type="supergroup", title="Чат амбассадора")
+    for text in ("/start", "/menu", "всем привет"):
+        await h.feed(message_update(USER_ID, text, chat=group))
+    await h.feed(callback_update(USER_ID, "menu:home", chat=group))
+    await h.feed(message_update(ADMIN_ID, "/admin", chat=group))
+    assert h.tg.texts() == []
+    async with h.factory() as session:
+        assert await session.get(User, USER_ID) is None
+
+    await _start(h, USER_ID, f"ref_{ADMIN_ID}")
+    async with h.factory() as session:
+        assert (await session.get(User, USER_ID)).referred_by_id == ADMIN_ID
 
 
 @pytest.mark.asyncio

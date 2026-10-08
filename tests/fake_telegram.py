@@ -239,11 +239,13 @@ def _next_update_id() -> int:
     return _update_id
 
 
-def message_update(user_id: int, text: str, *, message_id: int = 1, **kwargs: Any) -> Update:
+def message_update(
+    user_id: int, text: str, *, message_id: int = 1, chat: Chat | None = None, **kwargs: Any
+) -> Update:
     message = Message(
         message_id=message_id,
         date=datetime.now(UTC),
-        chat=Chat(id=user_id, type="private"),
+        chat=chat or Chat(id=user_id, type="private"),
         from_user=tg_user(user_id),
         text=text,
         **kwargs,
@@ -272,11 +274,13 @@ def forwarded_channel_post_update(
     return Update(update_id=_next_update_id(), message=message)
 
 
-def callback_update(user_id: int, data: str, *, message_id: int = 1, user: TgUser | None = None) -> Update:
+def callback_update(
+    user_id: int, data: str, *, message_id: int = 1, user: TgUser | None = None, chat: Chat | None = None
+) -> Update:
     message = Message(
         message_id=message_id,
         date=datetime.now(UTC),
-        chat=Chat(id=user_id, type="private"),
+        chat=chat or Chat(id=user_id, type="private"),
         from_user=TgUser(id=BOT_ID, is_bot=True, first_name="KodoStars", username=BOT_USERNAME),
         text="screen",
     )

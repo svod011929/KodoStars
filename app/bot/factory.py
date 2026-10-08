@@ -8,6 +8,7 @@ from app.bot.handlers import register_handlers
 from app.bot.middlewares.context import LoggingContextMiddleware
 from app.bot.middlewares.db import DbSessionMiddleware
 from app.bot.middlewares.op_gate import OpGateMiddleware
+from app.bot.middlewares.private import PrivateChatMiddleware
 from app.bot.middlewares.runtime import RuntimeMiddleware
 from app.bot.middlewares.throttle import ThrottleMiddleware
 from app.bot.middlewares.user import UserMiddleware
@@ -59,6 +60,7 @@ def create_dispatcher(
 ) -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
     dp.update.outer_middleware(LoggingContextMiddleware())
+    dp.update.outer_middleware(PrivateChatMiddleware())
     dp.update.outer_middleware(ThrottleMiddleware(settings.throttle_seconds))
     # Must wrap the DB session: one user → one transaction at a time.
     dp.update.outer_middleware(UserLockMiddleware())
