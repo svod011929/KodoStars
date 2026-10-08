@@ -115,7 +115,7 @@ async def blocker(session: AsyncSession, *, user: User, settings: Settings) -> s
         invites = await activated_invite_count(session, user.id)
         if invites < settings.withdraw_min_referrals:
             return (
-                f"Для вывода нужно {settings.withdraw_min_referrals} активных рефералов (сейчас {invites})."
+                f"Для вывода нужно активных рефералов: {settings.withdraw_min_referrals} (сейчас {invites})."
             )
     left = cooldown_left(user, settings)
     if left > timedelta(0):

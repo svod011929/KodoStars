@@ -73,6 +73,7 @@ def home(
     device_notice: str = "",
     l1_bonus: int = 0,
     withdraw_min: int = 0,
+    withdraw_blocked: bool = False,
     contest_prize: int = 0,
 ) -> str:
     if level.next_xp is not None:
@@ -88,6 +89,8 @@ def home(
         payout_line = (
             f"💸 До вывода: {progress_bar(balance / withdraw_min)} {max(balance, 0)}/{withdraw_min} {STAR}\n"
         )
+    elif withdraw_blocked:
+        payout_line = "💸 На вывод хватает — подробности в «Вывод»\n"
     else:
         payout_line = "💸 Вывод доступен — жми «Вывод»\n"
     boost = format_multiplier(boost_bp)

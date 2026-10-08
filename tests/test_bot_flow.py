@@ -394,8 +394,11 @@ async def test_withdraw_screen_explains_blockers_before_picking(harness: BotHarn
     h.settings.withdraw_min_referrals = 2
     try:
         await h.feed(callback_update(USER_ID, "menu:withdraw"))
-        assert "активных рефералов (сейчас 0)" in h.tg.last_text(USER_ID)
+        assert "активных рефералов: 2 (сейчас 0)" in h.tg.last_text(USER_ID)
         assert not any(data.startswith("wd:g:") for data in gift_buttons())
+        await h.feed(message_update(USER_ID, "/menu"))
+        home = h.tg.last_text(USER_ID)
+        assert "На вывод хватает" in home and "Вывод доступен" not in home
     finally:
         h.settings.withdraw_min_referrals = 0
 

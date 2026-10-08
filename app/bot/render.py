@@ -45,6 +45,12 @@ async def render_home(
         notice = texts.device_twink_notice()
     terms = await ambassadors.effective_referral_terms(session, user.id, settings)
     contest = await contests.current(session, now=contests.utc_now(), settings=settings)
+    withdraw_min = settings.withdraw_min if settings.withdraw_enabled else 0
+    withdraw_blocked = (
+        withdraw_min > 0
+        and balance >= withdraw_min
+        and await withdrawals.blocker(session, user=user, settings=settings) is not None
+    )
     text = texts.home(
         user,
         balance,
@@ -55,7 +61,8 @@ async def render_home(
         referral_link(bot_username, user.id),
         device_notice=notice,
         l1_bonus=terms.l1_bonus,
-        withdraw_min=settings.withdraw_min if settings.withdraw_enabled else 0,
+        withdraw_min=withdraw_min,
+        withdraw_blocked=withdraw_blocked,
         contest_prize=contests.top_prize(contest) if contest is not None else 0,
     )
     menu = keyboards.main_menu(
