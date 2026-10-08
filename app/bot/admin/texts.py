@@ -42,6 +42,7 @@ from app.services.audit import label as action_label
 from app.services.boosts import describe as describe_boost
 from app.services.promo import activation_link
 from app.services.stats import Dashboard
+from app.services.streaks import current_streak
 from app.services.tasks import task_target
 
 
@@ -254,7 +255,8 @@ def user_card(
         f"{'Premium' if user.is_premium else 'без Premium'}",
         "",
         f"💰 Баланс: <b>{balance} {STAR}</b>" + (f" · холд {held}" if held else ""),
-        f"🏅 Уровень {user.level} · {user.xp} XP · серия {user.streak} · активность {user.activity_score}",
+        f"🏅 Уровень {user.level} · {user.xp} XP · серия {current_streak(user)} · "
+        f"активность {user.activity_score}",
         f"👥 Рефералы L1/L2: {refs.get(1, 0)}/{refs.get(2, 0)} · активных {activated} · "
         f"заработано {ref_earned} {STAR}",
         f"🔗 Реферер: {h(referrer.display_name) if referrer else '—'} · "

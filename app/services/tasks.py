@@ -12,6 +12,7 @@ from app.services.channels import validate_channel_entry
 from app.services.errors import AlreadyClaimed, EconomyError, NotFound, ValidationError
 from app.services.levels import XP_TASK, add_xp, apply_multipliers, info_for_xp
 from app.services.referrals import activated_invite_count
+from app.services.streaks import current_streak
 
 # Returns True (member), False (not a member) or None (cannot check → fail-open).
 MembershipChecker = Callable[[str], Awaitable[bool | None]]
@@ -120,7 +121,7 @@ async def try_complete_event(
         payload = task.payload or {}
         ok = False
         if event == "daily_claimed" and task.kind == TaskKind.STREAK.value:
-            ok = user.streak >= int(payload.get("streak", 3))
+            ok = current_streak(user) >= int(payload.get("streak", 3))
         elif event == "boost_purchased" and payload.get("event") == "boost_purchased":
             ok = True
         elif event == "invite_activated" and task.kind == TaskKind.INVITE.value:
@@ -160,8 +161,9 @@ async def claim_task(
             raise EconomyError(f"Активных рефералов: {have} из {needed}. Пригласите ещё.")
     elif task.kind == TaskKind.STREAK.value:
         needed = int(payload.get("streak", 3))
-        if user.streak < needed:
-            raise EconomyError(f"Нужна серия {needed} дн. Сейчас: {user.streak}.")
+        have = current_streak(user)
+        if have < needed:
+            raise EconomyError(f"Нужна серия {needed} дн. Сейчас: {have}.")
     elif task.kind == TaskKind.SUBSCRIBE.value:
         channel = str(payload.get("channel", "")).strip()
         if channel:

@@ -26,6 +26,7 @@ from app.services.channels import parse_channel_entry
 from app.services.daily import DailyPreview
 from app.services.leaderboard import LeaderRow
 from app.services.levels import LevelInfo, format_multiplier, progress_bar
+from app.services.streaks import current_streak
 from app.services.tasks import task_target
 
 
@@ -93,7 +94,7 @@ def home(
         f"{hook}"
         f"Баланс: <b>{balance} {STAR}</b>{hold}\n"
         f"{level_line}\n"
-        f"{boost_line} · серия {user.streak} дн.\n\n"
+        f"{boost_line} · серия {current_streak(user)} дн.\n\n"
         f"Твоя ссылка:\n<code>{h(link)}</code>"
         f"{notice}"
     )
@@ -183,7 +184,7 @@ def profile(
         lines.append(f"⏳ В холде (заявки на вывод): {held} {STAR}")
     lines += [
         f"🏅 Уровень: {lvl} · множитель {format_multiplier(level.multiplier_bp)}",
-        f"🔥 Серия: {user.streak} дн.",
+        f"🔥 Серия: {current_streak(user)} дн.",
         f"⚡ Активность: {user.activity_score}",
         f"👥 Рефералы: L1 — {refs.get(1, 0)}, L2 — {refs.get(2, 0)}",
         f"💎 Заработано с рефералов: {ref_earned} {STAR}",
@@ -328,8 +329,14 @@ def daily_screen(preview: DailyPreview, settings: Settings) -> str:
             f"≈{preview.estimated_reward} {STAR} (серия {preview.streak_if_claimed} дн.).\n\n"
             "Не пропускай день — серия сбросится."
         )
+    lost = (
+        f"💔 Серия {preview.lost_streak} дн. прервалась — копим заново.\n\n"
+        if preview.lost_streak > 1
+        else ""
+    )
     return (
         "🎁 <b>Ежедневная награда</b>\n\n"
+        f"{lost}"
         f"Сегодня: <b>≈{preview.estimated_reward} {STAR}</b> "
         f"(база {preview.base_reward}, серия станет {preview.streak_if_claimed} дн.)\n"
         f"Каждый день серии +{settings.daily_streak_bonus} {STAR}, максимум "
