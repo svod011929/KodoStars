@@ -43,17 +43,19 @@ def main_menu(
     is_admin: bool = False,
     device_url: str | None = None,
     l1_bonus: int = 0,
+    contest: bool = False,
 ) -> InlineKeyboardMarkup:
     """Compact user menu: earn · social · money · help."""
     rows = []
     if device_url:
         rows.append([device_button(device_url)])
     ref_label = f"{l1_bonus} за друга" if l1_bonus > 0 else "Рефералы"
+    top_tab = "menu:top:contest" if contest else "menu:top:refs"
     rows += [
         [button(ref_label, "menu:refs", icon="people"), button("Ежедневка", "menu:daily", icon="gift")],
         [button("Задания", "menu:tasks", icon="tasks"), button("Профиль", "menu:profile", icon="profile")],
         [button("Вывод", "menu:withdraw", icon="withdraw"), button("Бусты", "menu:boosts", icon="boost")],
-        [button("Топ", "menu:top:refs", icon="top"), button("Промокод", "menu:promo", icon="promo")],
+        [button("Топ", top_tab, icon="top"), button("Промокод", "menu:promo", icon="promo")],
         [button("Амбассадор", "menu:amb", icon="handshake"), button("Помощь", "menu:help", icon="help")],
     ]
     if is_admin:
@@ -95,11 +97,15 @@ def greeting_keyboard(text: str | None, url: str | None) -> InlineKeyboardMarkup
     return markup([url_button(text, url)])
 
 
-def referrals_menu(link: str, share_text: str) -> InlineKeyboardMarkup:
+def referrals_menu(link: str, share_text: str, *, contest: bool = False) -> InlineKeyboardMarkup:
     share_url = f"https://t.me/share/url?url={quote(link, safe='')}&text={quote(share_text, safe='')}"
+    if contest:
+        board = button("Конкурс недели", "menu:top:contest", icon="gold")
+    else:
+        board = button("Топ рефереров", "menu:top:refs", icon="top")
     return markup(
         [url_button("Поделиться ссылкой", share_url, icon="share")],
-        [button("Топ рефереров", "menu:top:refs", icon="top"), button("В меню", "menu:home", icon="home")],
+        [board, button("В меню", "menu:home", icon="home")],
     )
 
 
@@ -172,12 +178,25 @@ def boost_card(product: BoostProduct) -> InlineKeyboardMarkup:
     )
 
 
-def top_menu(mode: str) -> InlineKeyboardMarkup:
-    refs = "• Рефералы" if mode == "refs" else "Рефералы"
-    earn = "• Заработок 7д" if mode == "earn" else "Заработок 7д"
-    return markup(
-        [button(refs, "menu:top:refs", icon="people"), button(earn, "menu:top:earn", icon="growth")],
+def _top_tab(label: str, tab: str, mode: str, icon: str) -> InlineKeyboardButton:
+    return button(f"• {label}" if tab == mode else label, f"menu:top:{tab}", icon=icon)
+
+
+def top_menu(mode: str, *, contest: bool = False) -> InlineKeyboardMarkup:
+    rows = [[_top_tab("Конкурс недели", "contest", mode, "gold")]] if contest else []
+    rows += [
+        [_top_tab("Рефералы", "refs", mode, "people"), _top_tab("Заработок 7д", "earn", mode, "growth")],
         [button("Моя ссылка", "menu:refs", icon="people"), button("В меню", "menu:home", icon="home")],
+    ]
+    return markup(*rows)
+
+
+def contest_prize_menu() -> InlineKeyboardMarkup:
+    return markup(
+        [
+            button("Конкурс недели", "menu:top:contest", icon="gold"),
+            button("В меню", "menu:home", icon="home"),
+        ]
     )
 
 

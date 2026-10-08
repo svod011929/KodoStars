@@ -71,6 +71,7 @@ class BotHarness:
     access: AccessRegistry
     store: RuntimeSettingsStore
     runner: BroadcastRunner
+    notifier: Notifier
 
     async def feed(self, update: Update) -> None:
         await self.dp.feed_update(self.bot, update)
@@ -150,6 +151,7 @@ async def harness() -> AsyncIterator[BotHarness]:
         access=access,
         store=store,
         runner=runner,
+        notifier=notifier,
     )
     await runner.shutdown()
     await bot.session.close()

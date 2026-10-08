@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import timedelta
 
 from app.bot import brand
 from app.bot import emoji as pe
@@ -24,8 +25,9 @@ from app.db.models import (
 )
 from app.services.ambassadors import ReferralTerms
 from app.services.channels import parse_channel_entry
+from app.services.contests import Results, Standing
 from app.services.daily import DailyPreview
-from app.services.leaderboard import LeaderRow
+from app.services.leaderboard import LeaderRow, mask_name
 from app.services.levels import LevelInfo, format_multiplier, progress_bar
 from app.services.streaks import current_streak
 from app.services.tasks import task_target
@@ -70,6 +72,7 @@ def home(
     device_notice: str = "",
     l1_bonus: int = 0,
     withdraw_min: int = 0,
+    contest_prize: int = 0,
 ) -> str:
     if level.next_xp is not None:
         level_line = (
@@ -99,9 +102,14 @@ def home(
         )
     else:
         hook = ""
+    if contest_prize > 0:
+        contest_line = f"🏆 Конкурс недели: до <b>{contest_prize} {STAR}</b> за 1 место — жми «Топ»\n\n"
+    else:
+        contest_line = ""
     return (
         f"{STAR} <b>{BOT}</b>\n"
         f"{hook}"
+        f"{contest_line}"
         f"Баланс: <b>{balance} {STAR}</b>{hold}\n"
         f"{payout_line}"
         f"{level_line}\n"
@@ -287,6 +295,7 @@ def referrals(
     recent: Sequence[User],
     *,
     terms: ReferralTerms,
+    contest_line: str = "",
 ) -> str:
     lines = [
         f"🔥 <b>{terms.l1_bonus} {STAR} за друга</b>",
@@ -311,6 +320,8 @@ def referrals(
     ]
     if rank:
         lines.append(f"🏆 Место в топе рефереров: #{rank}")
+    if contest_line:
+        lines += ["", contest_line]
     lines += ["", "🔗 Твоя ссылка:", f"<code>{h(link)}</code>"]
     if recent:
         lines += ["", "Недавние рефералы:"]
@@ -432,27 +443,109 @@ def boost_card(title: str, description: str, price: int, detail: str) -> str:
     return f"🚀 <b>{h(title)}</b>\n\n{h(description)}\n\n{detail}\nЦена: <b>{price} XTR</b>"
 
 
-def top(
-    rows_refs: Sequence[LeaderRow], rows_earn: Sequence[LeaderRow], mode: str, my_rank: int | None
-) -> str:
-    medals = ["🥇", "🥈", "🥉"]
+_MEDALS = ("🥇", "🥈", "🥉")
+
+
+def _place_mark(place: int) -> str:
+    return _MEDALS[place - 1] if place <= len(_MEDALS) else f"{place}."
+
+
+def _friends(count: int) -> str:
+    return _plural_ru(count, "друг", "друга", "друзей")
+
+
+def top(rows: Sequence[LeaderRow], mode: str, my_rank: int | None) -> str:
     if mode == "earn":
         title = "🏆 <b>Топ по заработку за 7 дней</b>"
-        rows = rows_earn
         unit = STAR
     else:
         title = "🏆 <b>Топ по рефералам</b>\n<i>Считаются только активные друзья.</i>"
-        rows = rows_refs
         unit = "реф."
     lines = [title, ""]
     if not rows:
         lines.append("Пока пусто — стань первым!")
-    for index, row in enumerate(rows):
-        medal = medals[index] if index < 3 else f"{index + 1}."
-        lines.append(f"{medal} {h(row.name)} — <b>{row.value}</b> {unit}")
+    for place, row in enumerate(rows, start=1):
+        lines.append(f"{_place_mark(place)} {h(row.name)} — <b>{row.value}</b> {unit}")
     if mode != "earn" and my_rank:
         lines += ["", f"Твоё место: #{my_rank}"]
     return "\n".join(lines)
+
+
+def contest(
+    seconds_left: int,
+    prizes: Sequence[int],
+    min_referrals: int,
+    board: Sequence[Standing],
+    mine: Standing | None,
+    last: Results | None,
+) -> str:
+    prize_line = " · ".join(f"{_place_mark(place)} {prize} {STAR}" for place, prize in enumerate(prizes, 1))
+    lines = [
+        "🏆 <b>Конкурс недели</b>",
+        "Больше всех активных друзей за неделю — забираешь приз на баланс.",
+        "",
+        f"🎁 Призы: {prize_line}",
+    ]
+    if min_referrals > 1:
+        friends = _plural_ru(min_referrals, "активного друга", "активных друзей", "активных друзей")
+        lines.append(f"🎯 Приз — от {min_referrals} {friends} за неделю")
+    lines += [f"⏳ Итоги через {fmt_duration(seconds_left)} — в понедельник, 00:00 UTC", ""]
+    if not board:
+        lines.append("Таблица пуста — первый активный друг выведет тебя в лидеры.")
+    for row in board:
+        prize = prizes[row.place - 1] if row.place <= len(prizes) and row.score >= min_referrals else 0
+        tail = f" · {prize} {STAR}" if prize else ""
+        lines.append(f"{_place_mark(row.place)} {h(mask_name(row.user))} — <b>{row.score}</b>{tail}")
+    lines += ["", _contest_me(mine, board, prizes, min_referrals)]
+    if last is not None:
+        lines += ["", _contest_results(last)]
+    lines += ["", "<i>Считаются друзья, активированные на этой неделе. Твинки и забаненные не в счёт.</i>"]
+    return "\n".join(lines)
+
+
+def _contest_me(
+    mine: Standing | None, board: Sequence[Standing], prizes: Sequence[int], min_referrals: int
+) -> str:
+    if mine is None:
+        return "Тебя пока нет в таблице — приводи друзей по своей ссылке."
+    line = f"Ты: <b>#{mine.place}</b> · {mine.score} {_friends(mine.score)}"
+    if mine.score < min_referrals:
+        return f"{line} — ещё {min_referrals - mine.score} до призового минимума"
+    if mine.place <= len(prizes):
+        return f"{line} — ты в призах, держи темп!"
+    if len(board) >= len(prizes):
+        return f"{line} — ещё {board[len(prizes) - 1].score - mine.score + 1} до призового места"
+    return line
+
+
+def _contest_results(last: Results) -> str:
+    first_day = last.contest.starts_at
+    last_day = last.contest.ends_at - timedelta(days=1)
+    title = f"<b>Итоги {first_day:%d.%m}–{last_day:%d.%m}</b>"
+    if not last.winners:
+        return f"{title}\nПризовых мест никто не занял."
+    rows = [
+        f"{_place_mark(winner.place)} {h(mask_name(user))} — {winner.score} · +{winner.prize} {STAR}"
+        for winner, user in last.winners
+    ]
+    return "\n".join([title, *rows])
+
+
+def contest_teaser(prizes: Sequence[int], mine: Standing | None) -> str:
+    head = f"🏆 Конкурс недели: до <b>{prizes[0]} {STAR}</b> за 1 место"
+    if mine is None:
+        return f"{head} — приведи друзей и попади в таблицу."
+    return f"{head} · ты <b>#{mine.place}</b> ({mine.score} {_friends(mine.score)})"
+
+
+def notify_contest_prize(place: int, prize: int, score: int) -> str:
+    mark = _MEDALS[place - 1] if place <= len(_MEDALS) else "🏆"
+    friends = _plural_ru(score, "активный друг", "активных друга", "активных друзей")
+    return (
+        f"{mark} <b>Конкурс недели: {place} место!</b>\n\n"
+        f"За неделю — {score} {friends}. Приз <b>+{prize} {STAR}</b> уже на балансе.\n"
+        "Новая неделя уже идёт — таблица обнулилась, можно забрать ещё."
+    )
 
 
 def withdraw_home(

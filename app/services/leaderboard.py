@@ -13,6 +13,7 @@ EARNING_KINDS: tuple[str, ...] = (
     LedgerKind.REFERRAL_BONUS.value,
     LedgerKind.REFERRAL_SHARE.value,
     LedgerKind.PROMO.value,
+    LedgerKind.CONTEST_PRIZE.value,
 )
 
 

@@ -114,7 +114,7 @@ async def run() -> None:
                 hint="Задайте WEB_PUBLIC_URL (HTTPS-адрес панели), чтобы включить антитвинк Mini App.",
             )
 
-    scheduler = EngagementScheduler(bot, session_factory, settings_store)
+    scheduler = EngagementScheduler(bot, session_factory, settings_store, notifier)
     if not settings.is_placeholder_token:
         scheduler.start()
 

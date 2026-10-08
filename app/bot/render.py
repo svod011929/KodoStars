@@ -55,5 +55,9 @@ async def render_home(
         device_notice=notice,
         l1_bonus=terms.l1_bonus,
         withdraw_min=settings.withdraw_min if settings.withdraw_enabled else 0,
+        contest_prize=settings.contest_prize_list[0] if settings.contest_enabled else 0,
     )
-    return text, keyboards.main_menu(is_admin, device_url=device_url, l1_bonus=terms.l1_bonus)
+    menu = keyboards.main_menu(
+        is_admin, device_url=device_url, l1_bonus=terms.l1_bonus, contest=settings.contest_enabled
+    )
+    return text, menu

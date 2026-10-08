@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from aiogram.methods import EditMessageText, SendMessage
 
-from app.bot.scheduler import EngagementScheduler
+from app.bot.scheduler import EngagementScheduler, ReminderRun
 from app.db.models import User
 from app.services.streaks import utc_today
 from tests.conftest import ADMIN_ID, OTHER_ID, USER_ID, BotHarness
@@ -24,7 +24,11 @@ async def _clean_state(harness: BotHarness) -> None:
 
 def _scheduler(h: BotHarness, hour: int = 17) -> EngagementScheduler:
     at = datetime.now(UTC).replace(hour=hour, minute=5, second=0, microsecond=0)
-    return EngagementScheduler(h.bot, h.factory, h.store, clock=lambda: at)
+    return EngagementScheduler(h.bot, h.factory, h.store, h.notifier, clock=lambda: at)
+
+
+async def _remind(h: BotHarness, hour: int = 17) -> ReminderRun:
+    return (await _scheduler(h, hour).tick()).reminders
 
 
 async def _set(h: BotHarness, user_id: int, **values) -> None:
@@ -54,8 +58,8 @@ async def test_reminder_is_sent_once_and_its_button_claims(harness: BotHarness) 
     await _set(h, OTHER_ID, last_daily_on=utc_today(), streak=1)
     h.tg.clear()
 
-    assert (await _scheduler(h, hour=9).tick()).sent == 0  # outside the send window
-    run = await _scheduler(h).tick()
+    assert (await _remind(h, hour=9)).sent == 0  # outside the send window
+    run = await _remind(h)
     assert (run.sent, run.blocked, run.failed) == (1, 0, 0)
     reminder = h.tg.last_text(USER_ID)
     assert "Серия 3 дн. сгорит через" in reminder and "серия станет 4 дн." in reminder
@@ -63,7 +67,7 @@ async def test_reminder_is_sent_once_and_its_button_claims(harness: BotHarness) 
     buttons = [b.callback_data for row in _last_markup(h, USER_ID).inline_keyboard for b in row]
     assert buttons == ["daily:claim", "remind:off", "menu:home"]
 
-    assert (await _scheduler(h).tick()).sent == 0  # once per day
+    assert (await _remind(h)).sent == 0  # once per day
 
     await h.feed(callback_update(USER_ID, "daily:claim"))
     assert any("Серия: 4 дн. подряд" in text for text in h.tg.texts(USER_ID))
@@ -74,7 +78,7 @@ async def test_opt_out_from_the_reminder_and_back_from_the_profile(harness: BotH
     h = harness
     await h.feed(message_update(USER_ID, "/start"))
     await _set(h, USER_ID, last_daily_on=utc_today() - timedelta(days=2), streak=5)
-    assert (await _scheduler(h).tick()).sent == 1
+    assert (await _remind(h)).sent == 1
     assert "Ежедневная награда ждёт" in h.tg.last_text(USER_ID)
 
     await h.feed(callback_update(USER_ID, "remind:off"))
@@ -97,7 +101,7 @@ async def test_blocked_users_are_marked_and_skipped(harness: BotHarness) -> None
         await h.feed(message_update(user_id, "/start"))
         await _set(h, user_id, last_daily_on=utc_today() - timedelta(days=1), streak=2)
     h.tg.blocked_chats.add(THIRD_ID)
-    run = await _scheduler(h).tick()
+    run = await _remind(h)
     assert (run.sent, run.blocked) == (1, 1)
     assert (await _user(h, THIRD_ID)).blocked_bot_at is not None
 
@@ -110,12 +114,12 @@ async def test_maintenance_and_runtime_switch_pause_reminders(harness: BotHarnes
     await _set(h, USER_ID, last_daily_on=utc_today() - timedelta(days=1), streak=2)
 
     await h.feed(callback_update(ADMIN_ID, "admin:set:daily_reminder_enabled:off"))
-    assert (await _scheduler(h).tick()).sent == 0
+    assert (await _remind(h)).sent == 0
     await h.feed(callback_update(ADMIN_ID, "admin:set:daily_reminder_enabled:reset"))
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:on"))
-    assert (await _scheduler(h).tick()).sent == 0
+    assert (await _remind(h)).sent == 0
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:reset"))
-    assert (await _scheduler(h).tick()).sent == 1
+    assert (await _remind(h)).sent == 1
 
 
 def _last_edit_markup(h: BotHarness):

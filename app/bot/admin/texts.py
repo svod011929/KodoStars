@@ -28,6 +28,7 @@ from app.db.models import (
     BoostKind,
     BoostProduct,
     Broadcast,
+    ContestStatus,
     FraudEvent,
     LedgerEntry,
     Payment,
@@ -496,6 +497,26 @@ def withdrawal_alert(wd: Withdrawal, user: User, balance: int, refs: dict[int, i
         f"рефералы {refs.get(1, 0)} (акт. {activated})\n"
         f"Регистрация {fmt_dt(user.created_at, with_time=False)}"
     )
+
+
+def contest_settled(
+    week: str, status: str, winners: Sequence[dict[str, Any]], *, min_referrals: int, paid_total: int
+) -> str:
+    if status == ContestStatus.CANCELLED.value:
+        return f"🏆 Конкурс {week} закрыт без призов: к концу недели он был выключен."
+    if not winners:
+        return (
+            f"🏆 Конкурс {week} подведён: никто не набрал {min_referrals}+ активных друзей "
+            "— призы не начислены."
+        )
+    lines = [f"🏆 <b>Итоги конкурса {week}</b>", ""]
+    for winner in winners:
+        lines.append(
+            f"{winner['place']}. {h(winner['name'])} (<code>{winner['user_id']}</code>) — "
+            f"{winner['score']} реф. · +{winner['prize']} {STAR}"
+        )
+    lines += ["", f"Начислено на балансы: <b>{paid_total} {STAR}</b>"]
+    return "\n".join(lines)
 
 
 def withdrawal_cancelled_alert(wd: Withdrawal, name: str) -> str:

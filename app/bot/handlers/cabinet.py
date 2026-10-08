@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
@@ -8,7 +10,7 @@ from app.bot.render import render_home
 from app.bot.utils import PAGE_SIZE, button, parse_id, safe_answer, safe_edit
 from app.config import Settings
 from app.db.models import BoostProduct, User
-from app.services import ambassadors, leaderboard, ledger, referrals, withdrawals
+from app.services import ambassadors, contests, leaderboard, ledger, referrals, withdrawals
 from app.services.boosts import active_boosts
 from app.services.levels import info_for_xp
 from app.services.referrals import referral_link
@@ -101,9 +103,15 @@ async def referrals_view(
     earned = await referrals.referral_earnings(session, user.id)
     rank = await leaderboard.user_rank_by_referrals(session, user.id)
     recent = await referrals.list_referrals(session, user.id, level=1, limit=5)
-    text = texts.referrals(user, link, stats, activated, earned, rank, settings, recent, terms=terms)
+    contest_line = ""
+    if settings.contest_enabled:
+        mine = await contests.place_of(session, contests.week_of(datetime.now(UTC)), user.id)
+        contest_line = texts.contest_teaser(settings.contest_prize_list, mine)
+    text = texts.referrals(
+        user, link, stats, activated, earned, rank, settings, recent, terms=terms, contest_line=contest_line
+    )
     share = texts.share_text(link, settings.signup_bonus, terms.l1_bonus)
-    return text, keyboards.referrals_menu(link, share)
+    return text, keyboards.referrals_menu(link, share, contest=settings.contest_enabled)
 
 
 @router.callback_query(F.data == "menu:refs")
@@ -115,14 +123,35 @@ async def menu_refs(
     await safe_edit(call.message, text, markup)
 
 
+async def contest_view(session: AsyncSession, user: User, settings: Settings) -> str:
+    now = datetime.now(UTC)
+    week = contests.week_of(now)
+    board = await contests.standings(session, week)
+    mine = await contests.place_of(session, week, user.id)
+    last = await contests.last_results(session, before=week)
+    return texts.contest(
+        week.seconds_left(now),
+        settings.contest_prize_list,
+        settings.contest_min_referrals,
+        board,
+        mine,
+        last,
+    )
+
+
 @router.callback_query(F.data.startswith("menu:top:"))
-async def menu_top(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
+async def menu_top(call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings) -> None:
     mode = (call.data or "").split(":")[-1]
-    rows_refs = await leaderboard.top_referrers(session, limit=10)
-    rows_earn = await leaderboard.top_earners(session, limit=10, days=7) if mode == "earn" else []
-    my_rank = await leaderboard.user_rank_by_referrals(session, db_user.id)
+    if mode == "contest" and settings.contest_enabled:
+        text = await contest_view(session, db_user, settings)
+    elif mode == "earn":
+        text = texts.top(await leaderboard.top_earners(session, limit=10, days=7), mode, None)
+    else:
+        mode = "refs"
+        rows = await leaderboard.top_referrers(session, limit=10)
+        text = texts.top(rows, mode, await leaderboard.user_rank_by_referrals(session, db_user.id))
     await safe_answer(call)
-    await safe_edit(call.message, texts.top(rows_refs, rows_earn, mode, my_rank), keyboards.top_menu(mode))
+    await safe_edit(call.message, text, keyboards.top_menu(mode, contest=settings.contest_enabled))
 
 
 @router.callback_query(F.data == "menu:help")
