@@ -1,11 +1,14 @@
 """Premium emoji helpers and button icon stripping."""
 
 import pytest
+from aiogram.enums import MessageEntityType
+from aiogram.types import Chat, Message, MessageEntity, User
 
 from app.bot import emoji as pe
+from app.bot import texts
 from app.bot.utils import button, url_button
 from app.config import Settings
-from app.services.app_settings import parse_value
+from app.services.app_settings import RuntimeSettingsStore, extract_currency_from_message, parse_value
 from app.services.errors import ValidationError
 
 
@@ -21,6 +24,37 @@ def test_premiumize_wraps_known_unicode() -> None:
     assert f'<tg-emoji emoji-id="{pe.DEFAULT_CURRENCY_ID}">⭐</tg-emoji>' in out
     assert '<tg-emoji emoji-id="6037249452824072506">🔒</tg-emoji>' in out
     assert pe.premiumize(out) == out  # idempotent once tagged
+
+
+def test_premiumize_wraps_emoji_next_to_existing_tags() -> None:
+    currency_tag = pe.currency()
+    out = pe.premiumize(f"🔥 Баланс: 10 {currency_tag} · 🔒")
+    assert '<tg-emoji emoji-id="6041731551845159060">🔥</tg-emoji>' in out
+    assert '<tg-emoji emoji-id="6037249452824072506">🔒</tg-emoji>' in out
+    assert out.count("<tg-emoji") == 3  # the existing tag is kept as is, not nested
+    assert pe.premiumize(out) == out
+
+
+def test_premiumize_only_touches_text_telegram_lets_it_change() -> None:
+    fire = '<tg-emoji emoji-id="6041731551845159060">🔥</tg-emoji>'
+    gift = pe.html("gift")
+    source = (
+        '<a href="https://x.y/🔥?q=🎁">ссылка 🔥</a> · <code>🔥</code> · <pre><code class="language-x">🎁</code></pre>'
+        " · <b>🔥 <i>🎁</i></b> · <blockquote>🎁</blockquote>"
+    )
+    out = pe.premiumize(source)
+    assert out.startswith('<a href="https://x.y/🔥?q=🎁">ссылка 🔥</a> · <code>🔥</code> · ')
+    assert '<pre><code class="language-x">🎁</code></pre>' in out
+    assert f"<b>{fire} <i>{gift}</i></b>" in out and f"<blockquote>{gift}</blockquote>" in out
+    assert pe.premiumize(out) == out
+    assert pe.premiumize("<CODE>🔥</CODE> 🔥") == f"<CODE>🔥</CODE> {fire}"
+
+
+def test_premiumize_leaves_overridden_currency_fallback_inside_tag() -> None:
+    pe.apply_currency("6032644646587338669", "🎁")
+    out = pe.premiumize(f"Награда {pe.currency()} и подарок 🎁")
+    assert out.count('<tg-emoji emoji-id="6032644646587338669">🎁</tg-emoji>') == 2
+    assert '<tg-emoji emoji-id="6032644646587338669"><tg-emoji' not in out
 
 
 def test_split_icon_strips_leading_emoji() -> None:
@@ -58,8 +92,6 @@ def test_currency_override_changes_star_and_premiumize() -> None:
 
 
 def test_star_proxy_reads_live_override() -> None:
-    from app.bot import texts
-
     pe.apply_currency("1111111111111111111", "💫")
     assert "1111111111111111111" in str(texts.STAR)
     assert "💫" in str(texts.STAR)
@@ -85,10 +117,6 @@ def test_settings_currency_defaults() -> None:
 
 
 def test_extract_currency_from_custom_emoji_message() -> None:
-    from aiogram.enums import MessageEntityType
-    from aiogram.types import Chat, Message, MessageEntity, User
-    from app.services.app_settings import extract_currency_from_message
-
     msg = Message(
         message_id=1,
         date=0,
@@ -110,9 +138,6 @@ def test_extract_currency_from_custom_emoji_message() -> None:
 
 
 def test_extract_currency_from_plain_text_id() -> None:
-    from aiogram.types import Chat, Message, User
-    from app.services.app_settings import extract_currency_from_message
-
     msg = Message(
         message_id=1,
         date=0,
@@ -127,8 +152,6 @@ def test_extract_currency_from_plain_text_id() -> None:
 
 @pytest.mark.asyncio
 async def test_set_currency_pair_updates_id_and_fallback(session, settings) -> None:
-    from app.services.app_settings import RuntimeSettingsStore
-
     store = RuntimeSettingsStore(settings)
     saved = await store.set_currency_pair(
         session,

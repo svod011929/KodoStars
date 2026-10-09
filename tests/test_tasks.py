@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import pytest
 
 from app.db.models import LedgerKind, TaskKind, User
@@ -6,6 +8,7 @@ from app.services import daily, events, ledger, referrals
 from app.services import tasks as task_service
 from app.services.antifraud import bump_activity
 from app.services.errors import AlreadyClaimed, EconomyError, ValidationError
+from app.services.streaks import utc_today
 
 
 async def _user(session, user_id: int) -> User:
@@ -119,6 +122,11 @@ async def test_invite_and_streak_requirements(session, settings) -> None:
     assert amount == 15
 
     referrer.streak = 3
+    referrer.last_daily_on = utc_today() - timedelta(days=2)
+    with pytest.raises(EconomyError, match=r"Нужна серия 3 дн\. Сейчас: 0"):
+        await task_service.claim_task(session, user=referrer, task_id=streak.id, settings=settings)
+
+    referrer.last_daily_on = utc_today()
     _, amount = await task_service.claim_task(session, user=referrer, task_id=streak.id, settings=settings)
     assert amount == 20
 

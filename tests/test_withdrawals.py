@@ -121,6 +121,29 @@ async def test_cooldown_after_sent(session, settings) -> None:
 
 
 @pytest.mark.asyncio
+async def test_blocker_matches_what_apply_rejects(session, settings) -> None:
+    user = await _user(session, 61, credit=200)
+    assert await withdrawals.blocker(session, user=user, settings=settings) is None
+
+    user.username = None
+    reason = await withdrawals.blocker(session, user=user, settings=settings)
+    assert reason is not None and "@username" in reason
+    with pytest.raises(WithdrawalError, match="@username"):
+        await withdrawals.apply(session, user=user, amount=50, settings=settings)
+    user.username = "w61"
+
+    settings.withdraw_cooldown_hours = 2
+    wd = await withdrawals.apply(session, user=user, amount=50, settings=settings)
+    assert await withdrawals.blocker(session, user=user, settings=settings) == (
+        "У вас уже есть открытая заявка на вывод"
+    )
+    await withdrawals.approve_manual(session, withdrawal=wd, admin_id=1)
+    await withdrawals.confirm_sent(session, withdrawal=wd, admin_id=1)
+    reason = await withdrawals.blocker(session, user=user, settings=settings)
+    assert reason == "Кулдаун на вывод: ещё 1 ч 59 мин"
+
+
+@pytest.mark.asyncio
 async def test_legacy_request_without_hold_is_debited_on_confirm(session, settings) -> None:
     """Requests created before v1.0 have no hold entry: debit happens on confirm_sent."""
     user = await _user(session, 57)

@@ -2,13 +2,31 @@
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock
+from urllib.parse import unquote
+
 import pytest
+from aiogram.enums import ChatMemberStatus
+from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot import texts
+from app.bot.handlers.cabinet import referrals_view
+from app.bot.render import render_home
 from app.config import Settings
-from app.db.models import AmbassadorKind, AmbassadorStatus, AmbassadorSlot, User
+from app.db.models import (
+    AmbassadorKind,
+    AmbassadorSlot,
+    AmbassadorStatus,
+    LedgerEntry,
+    LedgerKind,
+    ReferralEdge,
+    User,
+)
 from app.services import ambassadors as amb
+from app.services import referrals
+from app.services.errors import ValidationError
 
 
 @pytest.mark.asyncio
@@ -82,8 +100,6 @@ def test_normalize_invite_link() -> None:
 
 @pytest.mark.asyncio
 async def test_submit_approve_claim_daily_and_revoke(session: AsyncSession, settings: Settings) -> None:
-    from app.services.errors import ValidationError
-
     user = User(id=10, first_name="A")
     session.add(user)
     await session.flush()
@@ -135,9 +151,6 @@ async def test_submit_approve_claim_daily_and_revoke(session: AsyncSession, sett
 
 @pytest.mark.asyncio
 async def test_referral_bonus_uses_ambassador_terms(session: AsyncSession, settings: Settings) -> None:
-    from app.db.models import LedgerEntry, LedgerKind, ReferralEdge
-    from app.services import referrals
-
     settings.referral_min_piarflow_subs = 0
     settings.device_check_enabled = False
     settings.min_referral_activity = 0
@@ -183,12 +196,45 @@ async def test_referral_bonus_uses_ambassador_terms(session: AsyncSession, setti
 
 
 @pytest.mark.asyncio
+async def test_screens_advertise_ambassador_terms(session: AsyncSession, settings: Settings) -> None:
+    user = User(id=110, first_name="Amb")
+    session.add(user)
+    await session.flush()
+    slot = await amb.submit_application(
+        session, user=user, kind="channel", title="C", invite_link="https://t.me/amb110"
+    )
+    await amb.approve_slot(
+        session,
+        slot_id=slot.id,
+        admin_id=1,
+        l1_bonus=42,
+        l1_percent=31,
+        l2_bonus=7,
+        l2_percent=9,
+        promo_reward=5,
+        promo_max_uses=10,
+    )
+    await session.commit()
+
+    home, menu = await render_home(session, user, bot_username="bot", is_admin=False, settings=settings)
+    assert "🔥 <b>42 " in home
+    assert menu.inline_keyboard[0][0].text == "42 за друга"
+
+    body, markup = await referrals_view(session, user, settings, "bot")
+    assert "За друга (L1): <b>42" in body and "<b>31%</b>" in body
+    assert "<b>7" in body and "<b>9%</b>" in body
+    # Friends earn the global terms for their own invites, so that is what they are promised.
+    share = unquote(markup.inline_keyboard[0][0].url)
+    assert "10 ⭐ за каждого друга" in share and "42" not in share
+
+    help_text = texts.help_text(
+        settings, False, terms=await amb.effective_referral_terms(session, user.id, settings)
+    )
+    assert "<b>Рефералы</b> — 42 " in help_text and "31% с его заработка" in help_text
+
+
+@pytest.mark.asyncio
 async def test_publish_promo_requires_admin(session: AsyncSession, settings: Settings) -> None:
-    from unittest.mock import AsyncMock, MagicMock
-
-    from aiogram.enums import ChatMemberStatus
-    from app.services.errors import ValidationError
-
     user = User(id=10, first_name="A")
     session.add(user)
     await session.flush()
@@ -207,7 +253,6 @@ async def test_publish_promo_requires_admin(session: AsyncSession, settings: Set
         promo_max_uses=10,
     )
     await amb.set_chat_id(session, slot.id, -1001)
-    promo = await amb.claim_daily_promo(session, slot_id=slot.id, user_id=10)
 
     bot = MagicMock()
     bot.get_me = AsyncMock(return_value=MagicMock(id=999))
@@ -215,11 +260,12 @@ async def test_publish_promo_requires_admin(session: AsyncSession, settings: Set
     member.status = ChatMemberStatus.MEMBER
     bot.get_chat_member = AsyncMock(return_value=member)
     bot.send_message = AsyncMock()
+    post = {"text": "promo", "reply_markup": InlineKeyboardMarkup(inline_keyboard=[])}
 
     with pytest.raises(ValidationError):
-        await amb.publish_promo(bot, slot, promo)
+        await amb.publish_promo(bot, slot, **post)
     bot.send_message.assert_not_called()
 
     member.status = ChatMemberStatus.ADMINISTRATOR
-    await amb.publish_promo(bot, slot, promo)
-    bot.send_message.assert_awaited()
+    await amb.publish_promo(bot, slot, **post)
+    bot.send_message.assert_awaited_once_with(-1001, "promo", reply_markup=post["reply_markup"])

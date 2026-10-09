@@ -6,6 +6,7 @@ without touching Telegram.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +15,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
 from aiogram.enums import ParseMode, StickerType
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.methods import (
     AnswerCallbackQuery,
     AnswerPreCheckoutQuery,
@@ -57,6 +59,61 @@ from app.bot.request_middleware import install_request_middlewares
 BOT_TOKEN = "123456789:TEST-TOKEN-FOR-TESTS"
 BOT_ID = 123456789
 BOT_USERNAME = "kodostars_test_bot"
+
+_TELEGRAM_TAGS = frozenset(
+    {
+        "a",
+        "b",
+        "blockquote",
+        "code",
+        "del",
+        "em",
+        "i",
+        "ins",
+        "pre",
+        "s",
+        "span",
+        "strike",
+        "strong",
+        "tg-emoji",
+        "tg-spoiler",
+        "u",
+    }
+)
+_TAG = re.compile(r"<(/?)([A-Za-z][\w-]*)([^<>]*)>")
+
+# Messages any fake session refused the way Telegram would; conftest fails the test on them.
+rejected_html: list[str] = []
+
+
+def telegram_html_error(text: str) -> str | None:
+    """Why the Bot API would refuse ``text`` with ``parse_mode=HTML``, or ``None``.
+
+    Mirrors Telegram's parser: every ``<`` must open a supported tag, tags must nest,
+    ``tg-emoji`` needs an ``emoji-id``. A stray ``>`` or ``&`` is taken literally.
+    """
+    open_tags: list[str] = []
+    pos = 0
+    for match in _TAG.finditer(text):
+        if "<" in text[pos : match.start()]:
+            return "unescaped '<'"
+        pos = match.end()
+        closing, name, attrs = match.group(1), match.group(2).lower(), match.group(3)
+        if name not in _TELEGRAM_TAGS:
+            return f"unsupported tag <{name}>"
+        if closing:
+            if not open_tags or open_tags.pop() != name:
+                return f"unmatched </{name}>"
+        elif name == "tg-emoji" and "emoji-id=" not in attrs:
+            return "tg-emoji without emoji-id"
+        else:
+            open_tags.append(name)
+    if "<" in text[pos:]:
+        return "unescaped '<'"
+    if open_tags:
+        return f"unclosed <{open_tags[-1]}>"
+    return None
+
 
 # Fixed catalog so e2e withdraw tests do not depend on live Telegram.
 TEST_GIFTS: list[Gift] = [
@@ -112,6 +169,7 @@ class FakeSession(BaseSession):
         self.member_status: dict[tuple[str, int], str] = {}
         self.fail_refunds = False
         self.fail_send_gift = False
+        self.blocked_chats: set[int] = set()
         self._message_id = 1000
 
     async def close(self) -> None:
@@ -158,6 +216,11 @@ class FakeSession(BaseSession):
         timeout: int | None = None,  # noqa: ASYNC109 - signature dictated by aiogram BaseSession
     ) -> Any:
         self.requests.append(method)
+        if isinstance(method, (SendMessage, EditMessageText)) and method.parse_mode is not None:
+            error = telegram_html_error(method.text)
+            if error is not None:
+                rejected_html.append(f"{error}: {method.text!r}")
+                raise TelegramBadRequest(method=method, message=f"Bad Request: can't parse entities: {error}")
         return self._respond(method)
 
     def _message(self, chat_id: int | str, text: str | None = None, message_id: int | None = None) -> Message:
@@ -173,6 +236,8 @@ class FakeSession(BaseSession):
         if isinstance(method, GetMe):
             return self.bot_user()
         if isinstance(method, SendMessage):
+            if int(method.chat_id) in self.blocked_chats:
+                raise TelegramForbiddenError(method=method, message="Forbidden: bot was blocked by the user")
             return self._message(method.chat_id, method.text)
         if isinstance(method, EditMessageText):
             return self._message(method.chat_id or 0, method.text, message_id=method.message_id)
@@ -207,8 +272,6 @@ class FakeSession(BaseSession):
             return Gifts(gifts=list(TEST_GIFTS))
         if isinstance(method, SendGift):
             if self.fail_send_gift:
-                from aiogram.exceptions import TelegramBadRequest
-
                 raise TelegramBadRequest(method=method, message="BALANCE_TOO_LOW")
             return True
         if isinstance(method, RefundStarPayment):
@@ -237,11 +300,13 @@ def _next_update_id() -> int:
     return _update_id
 
 
-def message_update(user_id: int, text: str, *, message_id: int = 1, **kwargs: Any) -> Update:
+def message_update(
+    user_id: int, text: str, *, message_id: int = 1, chat: Chat | None = None, **kwargs: Any
+) -> Update:
     message = Message(
         message_id=message_id,
         date=datetime.now(UTC),
-        chat=Chat(id=user_id, type="private"),
+        chat=chat or Chat(id=user_id, type="private"),
         from_user=tg_user(user_id),
         text=text,
         **kwargs,
@@ -270,17 +335,19 @@ def forwarded_channel_post_update(
     return Update(update_id=_next_update_id(), message=message)
 
 
-def callback_update(user_id: int, data: str, *, message_id: int = 1) -> Update:
+def callback_update(
+    user_id: int, data: str, *, message_id: int = 1, user: TgUser | None = None, chat: Chat | None = None
+) -> Update:
     message = Message(
         message_id=message_id,
         date=datetime.now(UTC),
-        chat=Chat(id=user_id, type="private"),
+        chat=chat or Chat(id=user_id, type="private"),
         from_user=TgUser(id=BOT_ID, is_bot=True, first_name="KodoStars", username=BOT_USERNAME),
         text="screen",
     )
     query = CallbackQuery(
         id=f"cb{_next_update_id()}",
-        from_user=tg_user(user_id),
+        from_user=user or tg_user(user_id),
         chat_instance="ci",
         data=data,
         message=message,

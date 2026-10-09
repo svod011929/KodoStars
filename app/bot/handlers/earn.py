@@ -1,6 +1,6 @@
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, LabeledPrice
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, LabeledPrice
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot import keyboards, texts
@@ -20,13 +20,18 @@ router = Router(name="earn")
 # --- daily --------------------------------------------------------------------------
 
 
+async def daily_view(
+    session: AsyncSession, user: User, settings: Settings
+) -> tuple[str, InlineKeyboardMarkup]:
+    preview = await daily.preview(session, user=user, settings=settings)
+    return texts.daily_screen(preview, settings), keyboards.daily_menu(preview.claimed_today)
+
+
 @router.callback_query(F.data == "menu:daily")
 async def menu_daily(call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings) -> None:
-    preview = await daily.preview(session, user=db_user, settings=settings)
+    text, markup = await daily_view(session, db_user, settings)
     await safe_answer(call)
-    await safe_edit(
-        call.message, texts.daily_screen(preview, settings), keyboards.daily_menu(preview.claimed_today)
-    )
+    await safe_edit(call.message, text, markup)
 
 
 @router.callback_query(F.data == "daily:claim")

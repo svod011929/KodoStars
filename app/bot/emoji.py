@@ -191,12 +191,42 @@ def star() -> str:
     return currency()
 
 
+_TAG = re.compile(r"<[^>]*>")
+_TAG_NAME = re.compile(r"</?\s*([A-Za-z][\w-]*)")
+# Telegram rejects entities inside code/pre and a custom emoji inside a link;
+# existing tg-emoji tags already carry their glyph.
+_VERBATIM_TAGS = frozenset({"a", "code", "pre", "tg-emoji"})
+
+
 def premiumize(text: str) -> str:
-    """Expand ``{bot}`` and replace known unicode emoji with ``<tg-emoji>`` tags."""
+    """Expand ``{bot}`` and replace known unicode emoji with ``<tg-emoji>`` tags.
+
+    Only text nodes change: tag markup and attributes, existing ``<tg-emoji>``
+    tags and the contents of links, ``<code>`` and ``<pre>`` are kept verbatim,
+    so the call is idempotent and safe on admin-written HTML.
+    """
     if not text:
         return text
     text = brand.expand(text) or text
-    if "<tg-emoji" in text:
+    out: list[str] = []
+    verbatim = 0
+    position = 0
+    for match in _TAG.finditer(text):
+        chunk = text[position : match.start()]
+        out.append(chunk if verbatim else _premiumize_plain(chunk))
+        tag = match.group(0)
+        name = _TAG_NAME.match(tag)
+        if name is not None and name.group(1).lower() in _VERBATIM_TAGS and not tag.endswith("/>"):
+            verbatim = max(verbatim - 1, 0) if tag.startswith("</") else verbatim + 1
+        out.append(tag)
+        position = match.end()
+    tail = text[position:]
+    out.append(tail if verbatim else _premiumize_plain(tail))
+    return "".join(out)
+
+
+def _premiumize_plain(text: str) -> str:
+    if not text:
         return text
     out = text
     # Currency glyphs → live override (placeholder avoids re-matching fallback inside the tag).

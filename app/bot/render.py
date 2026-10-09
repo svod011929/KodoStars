@@ -5,7 +5,7 @@ from app.bot import keyboards, texts
 from app.bot.utils import fmt_dt
 from app.config import Settings
 from app.db.models import User
-from app.services import ledger, withdrawals
+from app.services import ambassadors, contests, ledger, withdrawals
 from app.services.boosts import active_boosts
 from app.services.devices import is_device_ok
 from app.services.levels import info_for_xp
@@ -43,6 +43,14 @@ async def render_home(
         notice = texts.device_notice(settings.device_check_for_withdraw)
     elif user.is_twink and settings.twink_block_referral:
         notice = texts.device_twink_notice()
+    terms = await ambassadors.effective_referral_terms(session, user.id, settings)
+    contest = await contests.current(session, now=contests.utc_now(), settings=settings)
+    withdraw_min = settings.withdraw_min if settings.withdraw_enabled else 0
+    withdraw_blocked = (
+        withdraw_min > 0
+        and balance >= withdraw_min
+        and await withdrawals.blocker(session, user=user, settings=settings) is not None
+    )
     text = texts.home(
         user,
         balance,
@@ -52,8 +60,12 @@ async def render_home(
         boost_until,
         referral_link(bot_username, user.id),
         device_notice=notice,
-        l1_bonus=settings.referral_l1_bonus,
+        l1_bonus=terms.l1_bonus,
+        withdraw_min=withdraw_min,
+        withdraw_blocked=withdraw_blocked,
+        contest_prize=contests.top_prize(contest) if contest is not None else 0,
     )
-    return text, keyboards.main_menu(
-        is_admin, device_url=device_url, l1_bonus=settings.referral_l1_bonus
+    menu = keyboards.main_menu(
+        is_admin, device_url=device_url, l1_bonus=terms.l1_bonus, contest=contest is not None
     )
+    return text, menu

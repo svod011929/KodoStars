@@ -176,9 +176,7 @@ async def wd_sent(call: CallbackQuery, session: AsyncSession) -> None:
 
 
 @router.callback_query(F.data.regexp(r"^admin:wd:fragment:(\d+)$"))
-async def wd_send_fragment(
-    call: CallbackQuery, session: AsyncSession, settings: Settings
-) -> None:
+async def wd_send_fragment(call: CallbackQuery, session: AsyncSession, settings: Settings) -> None:
     wd = await session.get(Withdrawal, parse_id(call.data))
     if wd is None:
         await safe_answer(call, "Заявка не найдена", alert=True)
@@ -220,4 +218,3 @@ async def wd_send_fragment(
     text, markup = await render_card(session, wd)
     await safe_edit(call.message, text, markup)
     await safe_answer(call, f"Отправлено @{purchase.username} · {purchase.amount}⭐")
-

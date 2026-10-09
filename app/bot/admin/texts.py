@@ -42,6 +42,7 @@ from app.services.audit import label as action_label
 from app.services.boosts import describe as describe_boost
 from app.services.promo import activation_link
 from app.services.stats import Dashboard
+from app.services.streaks import current_streak
 from app.services.tasks import task_target
 
 
@@ -76,17 +77,11 @@ def home(version: str, pending: int, running_broadcast: bool, maintenance: bool)
 
 
 def catalog_hub() -> str:
-    return (
-        "📦 <b>Каталог</b>\n\n"
-        "Задания, бусты, промокоды, приветки и кампании закупки."
-    )
+    return "📦 <b>Каталог</b>\n\nЗадания, бусты, промокоды, приветки и кампании закупки."
 
 
 def system_hub() -> str:
-    return (
-        "⚙️ <b>Система</b>\n\n"
-        "Платежи XTR, админы, журнал действий, антифрод и экспорт данных."
-    )
+    return "⚙️ <b>Система</b>\n\nПлатежи XTR, админы, журнал действий, антифрод и экспорт данных."
 
 
 def stats(
@@ -260,7 +255,8 @@ def user_card(
         f"{'Premium' if user.is_premium else 'без Premium'}",
         "",
         f"💰 Баланс: <b>{balance} {STAR}</b>" + (f" · холд {held}" if held else ""),
-        f"🏅 Уровень {user.level} · {user.xp} XP · серия {user.streak} · активность {user.activity_score}",
+        f"🏅 Уровень {user.level} · {user.xp} XP · серия {current_streak(user)} · "
+        f"активность {user.activity_score}",
         f"👥 Рефералы L1/L2: {refs.get(1, 0)}/{refs.get(2, 0)} · активных {activated} · "
         f"заработано {ref_earned} {STAR}",
         f"🔗 Реферер: {h(referrer.display_name) if referrer else '—'} · "
@@ -499,6 +495,41 @@ def withdrawal_alert(wd: Withdrawal, user: User, balance: int, refs: dict[int, i
         f"Уровень {user.level} · активность {user.activity_score} · "
         f"рефералы {refs.get(1, 0)} (акт. {activated})\n"
         f"Регистрация {fmt_dt(user.created_at, with_time=False)}"
+    )
+
+
+def contest_settled(
+    week: str, winners: Sequence[dict[str, Any]], *, min_referrals: int, paid_total: int
+) -> str:
+    if not winners:
+        if min_referrals > 1:
+            reason = f"никто не набрал {min_referrals}+ активных друзей"
+        else:
+            reason = "за неделю никто не привёл активных друзей"
+        return f"🏆 Конкурс {week} подведён: {reason} — призы не начислены."
+    lines = [f"🏆 <b>Итоги конкурса {week}</b>", ""]
+    for winner in winners:
+        lines.append(
+            f"{winner['place']}. {h(winner['name'])} (<code>{winner['user_id']}</code>) — "
+            f"{winner['score']} реф. · +{winner['prize']} {STAR}"
+        )
+    lines += ["", f"Начислено на балансы: <b>{paid_total} {STAR}</b>"]
+    return "\n".join(lines)
+
+
+_SCHEDULER_JOBS = {
+    "contest_settle": "итоги конкурса недели",
+    "contest_week": "открытие недели конкурса",
+    "reminders": "напоминания о ежедневке",
+}
+
+
+def scheduler_job_failed(job: str) -> str:
+    return (
+        f"⚠️ <b>Фоновая задача «{h(_SCHEDULER_JOBS.get(job, job))}» падает с ошибкой</b>\n"
+        "Бот повторяет её раз в минуту, остальные задачи работают. "
+        "Трейсбек — в логах (<code>engagement_job_failed</code>). "
+        "Следующее сообщение — только если задача снова сломается после починки."
     )
 
 
@@ -863,7 +894,7 @@ def setting_prompt(key: str, current: Any, default: Any, overridden: bool) -> st
         f"Сейчас: <code>{h(format_value(current))}</code>"
         f"{' (переопределено)' if overridden else ''}\n"
         f"Из .env: <code>{h(format_value(default))}</code>\n\n"
-        f"Отправьте новое значение ({hint})."
+        f"Отправьте новое значение ({h(hint)})."
     )
 
 
@@ -987,11 +1018,7 @@ def no_access() -> str:
 
 
 def ambassadors_hub(pending: int, approved: int) -> str:
-    return (
-        "🤝 <b>Амбассадоры</b>\n\n"
-        f"На проверке: <b>{pending}</b>\n"
-        f"Одобрено: <b>{approved}</b>"
-    )
+    return f"🤝 <b>Амбассадоры</b>\n\nНа проверке: <b>{pending}</b>\nОдобрено: <b>{approved}</b>"
 
 
 def ambassadors_empty(kind: str) -> str:

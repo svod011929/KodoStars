@@ -11,11 +11,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.bot import keyboards, texts
 from app.bot.handlers.states import UserFSM
 from app.bot.utils import parse_id, safe_answer, safe_edit
-from app.db.models import AMBASSADOR_KIND_LABELS, User
+from app.db.models import AMBASSADOR_KIND_LABELS, AmbassadorSlot, PromoCode, User
 from app.services import ambassadors as amb_service
+from app.services import promo as promo_service
 from app.services.errors import EconomyError
 
 router = Router(name="ambassador")
+
+
+async def _publish(bot: Bot, slot: AmbassadorSlot, promo: PromoCode, bot_username: str) -> None:
+    await amb_service.publish_promo(
+        bot,
+        slot,
+        text=texts.ambassador_promo_post(promo.code, promo.reward, promo.max_uses),
+        reply_markup=keyboards.ambassador_promo_post(promo_service.activation_link(bot_username, promo.code)),
+    )
 
 
 @router.callback_query(F.data == "menu:amb")
@@ -59,9 +69,7 @@ async def amb_link_enter(message: Message, state: FSMContext) -> None:
 
 
 @router.message(StateFilter(UserFSM.amb_title), F.text)
-async def amb_title_enter(
-    message: Message, session: AsyncSession, db_user: User, state: FSMContext
-) -> None:
+async def amb_title_enter(message: Message, session: AsyncSession, db_user: User, state: FSMContext) -> None:
     raw = (message.text or "").strip()
     if raw.startswith("/"):
         await state.clear()
@@ -85,23 +93,26 @@ async def amb_title_enter(
 
 
 @router.callback_query(F.data.regexp(r"^amb:slot:(\d+)$"))
-async def amb_slot(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
+async def amb_slot(call: CallbackQuery, session: AsyncSession, db_user: User, bot_username: str) -> None:
     slot = await amb_service.get_slot(session, parse_id(call.data))
     if slot.user_id != db_user.id:
         await safe_answer(call, "Не ваш слот", alert=True)
         return
     today = await amb_service.todays_promo(session, slot.id)
     code = today.code if today else None
+    link = promo_service.activation_link(bot_username, code) if code else None
     await safe_answer(call)
     await safe_edit(
         call.message,
-        texts.ambassador_slot_text(slot, code),
+        texts.ambassador_slot_text(slot, code, link),
         keyboards.ambassador_slot_card(slot, today_code=code),
     )
 
 
 @router.callback_query(F.data.regexp(r"^amb:claim:(\d+)$"))
-async def amb_claim(call: CallbackQuery, session: AsyncSession, db_user: User, bot: Bot) -> None:
+async def amb_claim(
+    call: CallbackQuery, session: AsyncSession, db_user: User, bot: Bot, bot_username: str
+) -> None:
     slot_id = parse_id(call.data)
     try:
         promo = await amb_service.claim_daily_promo(session, slot_id=slot_id, user_id=db_user.id)
@@ -109,7 +120,7 @@ async def amb_claim(call: CallbackQuery, session: AsyncSession, db_user: User, b
         posted = False
         if slot.promo_auto_post:
             try:
-                await amb_service.publish_promo(bot, slot, promo)
+                await _publish(bot, slot, promo, bot_username)
                 posted = True
             except EconomyError:
                 slot.promo_auto_post = False
@@ -117,16 +128,19 @@ async def amb_claim(call: CallbackQuery, session: AsyncSession, db_user: User, b
     except EconomyError as exc:
         await safe_answer(call, exc.message, alert=True)
         return
+    link = promo_service.activation_link(bot_username, promo.code)
     await safe_answer(call)
     await safe_edit(
         call.message,
-        texts.ambassador_promo_ready(promo.code, promo.reward, promo.max_uses, posted),
+        texts.ambassador_promo_ready(promo.code, promo.reward, promo.max_uses, posted, link),
         keyboards.ambassador_slot_card(slot, today_code=promo.code),
     )
 
 
 @router.callback_query(F.data.regexp(r"^amb:post:(\d+)$"))
-async def amb_post(call: CallbackQuery, session: AsyncSession, db_user: User, bot: Bot) -> None:
+async def amb_post(
+    call: CallbackQuery, session: AsyncSession, db_user: User, bot: Bot, bot_username: str
+) -> None:
     slot_id = parse_id(call.data)
     try:
         slot = await amb_service.get_slot(session, slot_id)
@@ -135,7 +149,7 @@ async def amb_post(call: CallbackQuery, session: AsyncSession, db_user: User, bo
         promo = await amb_service.todays_promo(session, slot_id)
         if promo is None:
             raise EconomyError("Сначала получите промокод на сегодня")
-        await amb_service.publish_promo(bot, slot, promo)
+        await _publish(bot, slot, promo, bot_username)
     except EconomyError as exc:
         await safe_answer(call, exc.message, alert=True)
         return

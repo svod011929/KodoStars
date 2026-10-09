@@ -103,9 +103,7 @@ class PiarFlowAdapter:
         paid = _paid_links(items)
         remaining = _pending(items)
         if remaining:
-            return OpResult.blocked(
-                self.name, remaining, "Ещё не все задания выполнены.", paid_links=paid
-            )
+            return OpResult.blocked(self.name, remaining, "Ещё не все задания выполнены.", paid_links=paid)
         self._links.pop(user.user_id)
         return OpResult.ok(self.name, paid_links=paid)
 

@@ -1,6 +1,7 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -89,6 +90,17 @@ async def set_blocked_bot(session: AsyncSession, user_id: int, blocked: bool) ->
         return
     user.blocked_bot_at = datetime.now(UTC) if blocked else None
     await session.flush()
+
+
+async def mark_blocked(session: AsyncSession, user_ids: Sequence[int]) -> None:
+    """Record that bulk messages to these users bounced (blocked bot / deleted account)."""
+    if not user_ids:
+        return
+    await session.execute(
+        update(User)
+        .where(User.id.in_(list(user_ids)), User.blocked_bot_at.is_(None))
+        .values(blocked_bot_at=datetime.now(UTC))
+    )
 
 
 async def list_user_ids(

@@ -12,21 +12,30 @@ from aiogram.methods import (
     SendInvoice,
     SendMessage,
 )
+from aiogram.types import Chat
+from aiogram.types import User as TgUser
 from sqlalchemy import select
 
+from app.bot import brand
+from app.config import RUNTIME_OVERRIDABLE, SETTINGS_GROUPS
 from app.db.models import (
     Broadcast,
     BroadcastStatus,
+    FraudEvent,
     LedgerKind,
     ReferralEdge,
     User,
     Withdrawal,
     WithdrawalStatus,
 )
-from app.services import devices, ledger, payments, promo, referrals
+from app.op.base import OpResult, Sponsor
+from app.op.tgrass import TgrassAdapter
+from app.services import ambassadors, devices, ledger, payments, promo, referrals
 from app.services.fragment import FragmentPurchase
 from tests.conftest import ADMIN_ID, OTHER_ID, USER_ID, BotHarness
 from tests.fake_telegram import (
+    BOT_ID,
+    BOT_USERNAME,
     callback_update,
     message_update,
     pre_checkout_update,
@@ -58,6 +67,7 @@ async def test_start_creates_user_credits_signup_and_shows_home(harness: BotHarn
     home = h.tg.last_text(USER_ID)
     assert "KodoStars" in home
     assert f"start=ref_{USER_ID}" in home
+    assert f"До вывода: ▰▱▱▱▱▱▱▱▱▱ {h.settings.signup_bonus}/{h.settings.withdraw_min}" in home
     assert await _balance(h, USER_ID) == h.settings.signup_bonus
     async with h.factory() as session:
         user = await session.get(User, USER_ID)
@@ -86,9 +96,6 @@ async def test_op_gate_unverified_skips_piarflow_allows_tgrass_skip(harness: Bot
 
 @pytest.mark.asyncio
 async def test_op_gate_unverified_shows_tgrass_sponsors(harness: BotHarness, monkeypatch) -> None:
-    from app.op.base import OpResult, Sponsor
-    from app.op.tgrass import TgrassAdapter
-
     h = harness
     h.settings.web_public_url = "https://mini.example"
     h.settings.device_check_for_op = True
@@ -105,10 +112,18 @@ async def test_op_gate_unverified_shows_tgrass_sponsors(harness: BotHarness, mon
     monkeypatch.setattr(TgrassAdapter, "check", _blocked)
     monkeypatch.setattr(TgrassAdapter, "verify", _blocked)
     await _start(h, USER_ID)
-    assert "tgrass" in h.tg.last_text(USER_ID).lower() or "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID)
+    assert (
+        "tgrass" in h.tg.last_text(USER_ID).lower()
+        or "Подпишитесь" in h.tg.last_text(USER_ID)
+        or "Tgrass" in h.tg.last_text(USER_ID)
+    )
     # Menu stays gated until Tgrass is done.
     await h.feed(callback_update(USER_ID, "menu:daily"))
-    assert "Подпишитесь" in h.tg.last_text(USER_ID) or "Tgrass" in h.tg.last_text(USER_ID) or "задан" in h.tg.last_text(USER_ID).lower()
+    assert (
+        "Подпишитесь" in h.tg.last_text(USER_ID)
+        or "Tgrass" in h.tg.last_text(USER_ID)
+        or "задан" in h.tg.last_text(USER_ID).lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -152,6 +167,73 @@ async def test_concurrent_double_start_creates_one_referral_edge(harness: BotHar
     assert not any("Ошибка в боте" in text for text in h.tg.texts(ADMIN_ID))
     assert sum("новый друг" in text for text in h.tg.texts(ADMIN_ID)) == 1
     assert sum("KodoStars" in text for text in h.tg.texts(USER_ID)) == 2
+
+
+@pytest.mark.asyncio
+async def test_group_chat_traffic_is_ignored(harness: BotHarness) -> None:
+    """The bot is an admin in ambassadors' chats for auto-posts and sees every message there."""
+    h = harness
+    await _start(h, ADMIN_ID)
+    h.tg.clear()
+    group = Chat(id=-100500, type="supergroup", title="Чат амбассадора")
+    for text in ("/start", "/menu", "всем привет"):
+        await h.feed(message_update(USER_ID, text, chat=group))
+    await h.feed(callback_update(USER_ID, "menu:home", chat=group))
+    await h.feed(message_update(ADMIN_ID, "/admin", chat=group))
+    assert h.tg.texts() == []
+    async with h.factory() as session:
+        assert await session.get(User, USER_ID) is None
+
+    await _start(h, USER_ID, f"ref_{ADMIN_ID}")
+    async with h.factory() as session:
+        assert (await session.get(User, USER_ID)).referred_by_id == ADMIN_ID
+
+
+@pytest.mark.asyncio
+async def test_ambassador_promo_link_brings_referrals(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, ADMIN_ID)
+    await _start(h, USER_ID)
+    channel = -100777
+    async with h.factory() as session:
+        slot = await ambassadors.submit_application(
+            session,
+            user=await session.get(User, USER_ID),
+            kind="channel",
+            title="Канал",
+            invite_link="https://t.me/amb_channel",
+        )
+        await ambassadors.approve_slot(
+            session,
+            slot_id=slot.id,
+            admin_id=ADMIN_ID,
+            l1_bonus=40,
+            l1_percent=20,
+            l2_bonus=0,
+            l2_percent=0,
+            promo_reward=7,
+            promo_max_uses=0,
+        )
+        await ambassadors.set_chat_id(session, slot.id, channel)
+        slot.promo_auto_post = True
+        slot_id = slot.id
+        await session.commit()
+    h.tg.member_status[(str(channel), BOT_ID)] = "administrator"
+
+    await h.feed(callback_update(USER_ID, f"amb:claim:{slot_id}"))
+    post = [m for m in h.tg.sent(SendMessage) if m.chat_id == channel][-1]
+    link = post.reply_markup.inline_keyboard[0][0].url
+    assert link.startswith(f"https://t.me/{BOT_USERNAME}?start=promo_AMB")
+    assert link in h.tg.last_text(USER_ID)
+
+    await h.feed(message_update(OTHER_ID, f"/start {link.split('start=')[1]}"))
+    await h.feed(message_update(ADMIN_ID, f"/start {link.split('start=')[1]}"))
+    assert await _balance(h, OTHER_ID) == 5 + 7
+    assert any("новый друг" in text for text in h.tg.texts(USER_ID))
+    async with h.factory() as session:
+        assert (await session.get(User, OTHER_ID)).referred_by_id == USER_ID
+        assert (await session.get(User, ADMIN_ID)).referred_by_id is None
+        assert not (await session.scalars(select(FraudEvent))).all()
 
 
 @pytest.mark.asyncio
@@ -250,6 +332,30 @@ async def test_daily_claim_flow(harness: BotHarness) -> None:
 
 
 @pytest.mark.asyncio
+async def test_shortcut_commands_open_their_screens(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, USER_ID)
+
+    def last_buttons() -> set[str]:
+        markup = [m for m in h.tg.sent(SendMessage) if m.chat_id == USER_ID][-1].reply_markup
+        return {b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data}
+
+    await h.feed(message_update(USER_ID, "/daily"))
+    assert "Ежедневная награда" in h.tg.last_text(USER_ID) and "daily:claim" in last_buttons()
+    await h.feed(message_update(USER_ID, "/ref"))
+    assert f"start=ref_{USER_ID}" in h.tg.last_text(USER_ID)
+    await h.feed(message_update(USER_ID, "/top"))
+    assert "Топ по рефералам" in h.tg.last_text(USER_ID) and "menu:top:contest" not in last_buttons()
+
+    await _start(h, ADMIN_ID)
+    await h.feed(callback_update(ADMIN_ID, "admin:set:contest_enabled:on"))
+    await h.feed(message_update(USER_ID, "/top"))
+    assert "Конкурс недели" in h.tg.last_text(USER_ID) and "menu:top:contest" in last_buttons()
+    await h.feed(message_update(USER_ID, "/help"))
+    assert "Конкурс недели" in h.tg.last_text(USER_ID) and "/daily" in h.tg.last_text(USER_ID)
+
+
+@pytest.mark.asyncio
 async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness, monkeypatch) -> None:
     h = harness
     await _start(h, ADMIN_ID)
@@ -284,9 +390,7 @@ async def test_withdraw_flow_notifies_admin_and_user(harness: BotHarness, monkey
 
     monkeypatch.setattr("app.services.fragment.buy_stars", _fake_buy)
     await h.feed(callback_update(ADMIN_ID, "admin:wd:fragment:1"))
-    assert "отправлен" in h.tg.last_text(USER_ID) or any(
-        "Отправлено" in a for a in h.tg.alerts()
-    )
+    assert "отправлен" in h.tg.last_text(USER_ID) or any("Отправлено" in a for a in h.tg.alerts())
     async with h.factory() as session:
         wd = await session.get(Withdrawal, 1)
         assert wd.status == WithdrawalStatus.SENT.value
@@ -340,6 +444,41 @@ async def test_withdraw_gift_reject_with_reason(harness: BotHarness) -> None:
     assert await _balance(h, USER_ID) == 205
     user_note = h.tg.last_text(USER_ID)
     assert "отклонена" in user_note and "накрутку" in user_note
+
+
+@pytest.mark.asyncio
+async def test_withdraw_screen_explains_blockers_before_picking(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, USER_ID)
+    async with h.factory() as session:
+        await ledger.credit(session, user_id=USER_ID, amount=100, kind=LedgerKind.TASK)
+        await session.commit()
+
+    def gift_buttons() -> list[str]:
+        markup = [m for m in h.tg.sent(EditMessageText) if m.chat_id == USER_ID][-1].reply_markup
+        return [b.callback_data for row in markup.inline_keyboard for b in row if b.callback_data]
+
+    no_username = TgUser(id=USER_ID, is_bot=False, first_name="Daniel")
+    await h.feed(callback_update(USER_ID, "menu:withdraw", user=no_username))
+    assert "нужен публичный @username" in h.tg.last_text(USER_ID)
+    assert not any(data.startswith("wd:g:") for data in gift_buttons())
+
+    h.settings.withdraw_min_referrals = 2
+    try:
+        await h.feed(callback_update(USER_ID, "menu:withdraw"))
+        assert "активных рефералов: 2 (сейчас 0)" in h.tg.last_text(USER_ID)
+        assert not any(data.startswith("wd:g:") for data in gift_buttons())
+        await h.feed(message_update(USER_ID, "/menu"))
+        home = h.tg.last_text(USER_ID)
+        assert "На вывод хватает" in home and "Вывод доступен" not in home
+    finally:
+        h.settings.withdraw_min_referrals = 0
+
+    await h.feed(callback_update(USER_ID, "menu:withdraw"))
+    assert "Выберите готовый подарок" in h.tg.last_text(USER_ID)
+    assert "wd:g:g50" in gift_buttons()
+    await h.feed(message_update(USER_ID, "/menu"))
+    assert "Вывод доступен" in h.tg.last_text(USER_ID)
 
 
 @pytest.mark.asyncio
@@ -414,8 +553,6 @@ async def test_runtime_settings_and_maintenance(harness: BotHarness) -> None:
 
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:on"))
     await h.feed(callback_update(USER_ID, "menu:daily"))
-    from app.bot import brand
-
     expanded = brand.expand(h.settings.maintenance_text) or h.settings.maintenance_text
     assert expanded[:20] in h.tg.alerts()[-1]
     await h.feed(message_update(USER_ID, "/menu"))
@@ -425,6 +562,17 @@ async def test_runtime_settings_and_maintenance(harness: BotHarness) -> None:
     await h.feed(callback_update(ADMIN_ID, "admin:set:maintenance_mode:reset"))
     await h.feed(message_update(USER_ID, "/menu"))
     assert "KodoStars" in h.tg.last_text(USER_ID)
+
+
+@pytest.mark.asyncio
+async def test_every_settings_screen_opens(harness: BotHarness) -> None:
+    h = harness
+    await _start(h, ADMIN_ID)
+    for group in SETTINGS_GROUPS:
+        await h.feed(callback_update(ADMIN_ID, f"admin:set:g:{group}"))
+    for key in RUNTIME_OVERRIDABLE:
+        await h.feed(callback_update(ADMIN_ID, f"admin:set:{key}"))
+        assert f"<code>{key}</code>" in h.tg.last_text(ADMIN_ID)
 
 
 @pytest.mark.asyncio

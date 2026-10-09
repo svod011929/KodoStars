@@ -39,6 +39,7 @@ class LedgerKind(StrEnum):
     PROMO = "promo"
     REFUND_REVOKE = "refund_revoke"
     UNSUB_PENALTY = "unsub_penalty"
+    CONTEST_PRIZE = "contest_prize"
 
 
 LEDGER_KIND_LABELS: dict[str, str] = {
@@ -56,6 +57,7 @@ LEDGER_KIND_LABELS: dict[str, str] = {
     LedgerKind.PROMO.value: "Промокод",
     LedgerKind.REFUND_REVOKE.value: "Возврат платежа",
     LedgerKind.UNSUB_PENALTY.value: "Штраф за отписку",
+    LedgerKind.CONTEST_PRIZE.value: "Приз конкурса недели",
 }
 
 
@@ -159,11 +161,18 @@ AMBASSADOR_STATUS_LABELS: dict[str, str] = {
 }
 
 
+class ContestStatus(StrEnum):
+    RUNNING = "running"
+    SETTLED = "settled"
+    CANCELLED = "cancelled"
+
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         Index("ix_users_created_at", "created_at"),
         Index("ix_users_last_action_at", "last_action_at"),
+        Index("ix_users_last_daily_on", "last_daily_on"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -187,6 +196,8 @@ class User(Base):
     last_op_ok_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     blocked_bot_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reminders_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    last_reminded_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Anti-multiaccount (device verification through the Mini App).
     device_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     device_fp: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
@@ -236,6 +247,7 @@ class ReferralEdge(Base):
     __table_args__ = (
         UniqueConstraint("referrer_id", "referee_id", "level", name="uq_referral_edge"),
         Index("ix_referral_referrer", "referrer_id"),
+        Index("ix_referral_level_credited", "level", "credited_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -607,6 +619,46 @@ class CampaignHit(Base):
     campaign_id: Mapped[int] = mapped_column(Integer, ForeignKey("campaigns.id"), index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, index=True)
     is_new: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )
+
+
+class Contest(Base):
+    """Weekly referral race, one row per ISO week; settled once after ``ends_at``.
+
+    ``prizes`` and ``min_referrals`` follow the settings while the week runs and are
+    what the week pays. ``starts_at`` is later than Monday 00:00 when the contest was
+    switched on mid-week.
+    """
+
+    __tablename__ = "contests"
+    __table_args__ = (UniqueConstraint("week_key", name="uq_contests_week_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    week_key: Mapped[str] = mapped_column(String(10))
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), default=ContestStatus.RUNNING.value)
+    prizes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    min_referrals: Mapped[int] = mapped_column(Integer, default=0)
+    paid_total: Mapped[int] = mapped_column(Integer, default=0)
+    settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, server_default=func.now()
+    )
+
+
+class ContestWinner(Base):
+    __tablename__ = "contest_winners"
+    __table_args__ = (UniqueConstraint("contest_id", "place", name="uq_contest_winner_place"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    contest_id: Mapped[int] = mapped_column(Integer, ForeignKey("contests.id"))
+    place: Mapped[int] = mapped_column(Integer)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    score: Mapped[int] = mapped_column(Integer)
+    prize: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, server_default=func.now()
     )

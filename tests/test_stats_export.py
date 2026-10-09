@@ -4,7 +4,7 @@ from io import StringIO
 import pytest
 from sqlalchemy import select
 
-from app.db.models import BoostProduct, LedgerKind, User
+from app.db.models import BoostProduct, LedgerKind, ReferralEdge, User
 from app.db.seed import seed_catalog
 from app.services import daily, export, leaderboard, ledger, promo, referrals, stats, withdrawals
 from app.services.antifraud import bump_activity, record_event, suspicious_referrers
@@ -66,7 +66,7 @@ async def test_dashboard_numbers(session, settings) -> None:
 async def test_leaderboard_and_masking(session, settings) -> None:
     await _build_world(session, settings)
     top = await leaderboard.top_referrers(session, limit=5)
-    assert top[0].user_id == 701 and top[0].value == 6
+    assert top[0].user_id == 701 and top[0].value == 3  # 6 invited, 3 activated
     assert top[0].name == "@ro***r"
     earners = await leaderboard.top_earners(session, limit=5, days=7)
     assert earners[0].user_id in {701, 702}
@@ -74,6 +74,31 @@ async def test_leaderboard_and_masking(session, settings) -> None:
     assert await leaderboard.user_rank_by_referrals(session, 702) is None
     short = User(id=1, first_name="Al")
     assert leaderboard.mask_name(short) == "A***"
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_drops_banned_before_limit(session) -> None:
+    plan = {801: 3, 802: 2, 803: 1}
+    friend_id = 900
+    for referrer_id, activated in plan.items():
+        await _user(session, referrer_id)
+        for _ in range(activated):
+            await _user(session, friend_id, referral_activated=True)
+            session.add(ReferralEdge(referrer_id=referrer_id, referee_id=friend_id, level=1))
+            friend_id += 1
+    await _user(session, friend_id)
+    session.add(ReferralEdge(referrer_id=803, referee_id=friend_id, level=1))
+    (await session.get(User, 801)).is_banned = True
+    for user_id, amount in ((801, 500), (802, 50), (803, 10)):
+        await ledger.credit(session, user_id=user_id, amount=amount, kind=LedgerKind.TASK)
+    await session.flush()
+
+    top = await leaderboard.top_referrers(session, limit=2)
+    assert [(row.user_id, row.value) for row in top] == [(802, 2), (803, 1)]
+    assert await leaderboard.user_rank_by_referrals(session, 802) == 1
+    assert await leaderboard.user_rank_by_referrals(session, 803) == 2
+    earners = await leaderboard.top_earners(session, limit=2, days=7)
+    assert [(row.user_id, row.value) for row in earners] == [(802, 50), (803, 10)]
 
 
 @pytest.mark.asyncio

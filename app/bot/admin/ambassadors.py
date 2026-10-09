@@ -58,7 +58,7 @@ async def amb_list(call: CallbackQuery, session: AsyncSession, state: FSMContext
     slots = await amb_service.list_by_status(session, AmbassadorStatus.APPROVED.value)
     await safe_answer(call)
     if not slots:
-        text, markup = await _hub(session)
+        _text, markup = await _hub(session)
         await safe_edit(call.message, texts.ambassadors_empty("одобренные"), markup)
         return
     await safe_edit(call.message, "Одобренные слоты:", kb.ambassadors_list(slots))
@@ -106,9 +106,7 @@ async def amb_l2_bonus(message: Message, state: FSMContext) -> None:
 
 @router.message(StateFilter(AdminFSM.amb_l2_percent), F.text)
 async def amb_l2_percent(message: Message, state: FSMContext) -> None:
-    await _capture_int(
-        message, state, "l2_percent", AdminFSM.amb_promo_reward, texts.amb_ask_promo_reward()
-    )
+    await _capture_int(message, state, "l2_percent", AdminFSM.amb_promo_reward, texts.amb_ask_promo_reward())
 
 
 @router.message(StateFilter(AdminFSM.amb_promo_reward), F.text)
@@ -142,7 +140,11 @@ async def amb_promo_max_uses(
                 promo_max_uses=int(data["promo_max_uses"]),
             )
             await audit.log_action(
-                session, admin_id=db_user.id, action="ambassador.edit", target_type="ambassador", target_id=slot.id
+                session,
+                admin_id=db_user.id,
+                action="ambassador.edit",
+                target_type="ambassador",
+                target_id=slot.id,
             )
         else:
             slot = await amb_service.approve_slot(
@@ -174,9 +176,7 @@ async def amb_promo_max_uses(
     )
 
 
-async def _capture_int(
-    message: Message, state: FSMContext, key: str, next_state, next_prompt: str
-) -> None:
+async def _capture_int(message: Message, state: FSMContext, key: str, next_state, next_prompt: str) -> None:
     raw = (message.text or "").strip()
     if not raw.isdigit():
         await message.answer("Нужно целое число ≥ 0.")
@@ -223,11 +223,13 @@ async def amb_reject_reason(
 @router.callback_query(F.data.regexp(r"^admin:amb:(\d+):revoke$"))
 async def amb_revoke(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
     try:
-        slot = await amb_service.revoke_slot(
-            session, slot_id=parse_id(call.data, -2), admin_id=db_user.id
-        )
+        slot = await amb_service.revoke_slot(session, slot_id=parse_id(call.data, -2), admin_id=db_user.id)
         await audit.log_action(
-            session, admin_id=db_user.id, action="ambassador.revoke", target_type="ambassador", target_id=slot.id
+            session,
+            admin_id=db_user.id,
+            action="ambassador.revoke",
+            target_type="ambassador",
+            target_id=slot.id,
         )
     except EconomyError as exc:
         await safe_answer(call, exc.message, alert=True)

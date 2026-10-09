@@ -79,6 +79,51 @@ async def held_total(session: AsyncSession, user_id: int | None = None) -> int:
     return int((await session.execute(stmt)).scalar_one())
 
 
+def cooldown_left(user: User, settings: Settings) -> timedelta:
+    if user.last_withdraw_at is None:
+        return timedelta(0)
+    last = user.last_withdraw_at
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=UTC)
+    left = timedelta(hours=settings.withdraw_cooldown_hours) - (datetime.now(UTC) - last)
+    return max(left, timedelta(0))
+
+
+async def blocker(session: AsyncSession, *, user: User, settings: Settings) -> str | None:
+    """Why the user cannot file any withdrawal right now, or ``None``.
+
+    The withdraw screen shows this before the user picks a gift; amount limits
+    and the balance depend on the gift and are checked by :func:`apply`.
+    """
+    if not settings.withdraw_enabled:
+        return "Вывод временно приостановлен. Следите за новостями."
+    if not (user.username or "").strip():
+        return (
+            "Для вывода нужен публичный @username — Stars отправляются по нему. "
+            "Задайте его в Telegram (Настройки → Имя пользователя) и откройте вывод снова."
+        )
+    if settings.device_check_for_withdraw and not is_device_ok(user, settings):
+        return "Сначала подтвердите устройство — кнопка «🛡 Подтвердить устройство» в главном меню."
+    if withdraw_blocked_by_twink(user, settings):
+        return (
+            "Вывод недоступен: с этого устройства уже зарегистрирован другой аккаунт. "
+            "Если это ошибка — напишите в поддержку."
+        )
+    if await open_withdrawal(session, user.id) is not None:
+        return "У вас уже есть открытая заявка на вывод"
+    if settings.withdraw_min_referrals > 0:
+        invites = await activated_invite_count(session, user.id)
+        if invites < settings.withdraw_min_referrals:
+            return (
+                f"Для вывода нужно активных рефералов: {settings.withdraw_min_referrals} (сейчас {invites})."
+            )
+    left = cooldown_left(user, settings)
+    if left > timedelta(0):
+        seconds = int(left.total_seconds())
+        return f"Кулдаун на вывод: ещё {seconds // 3600} ч {seconds % 3600 // 60} мин"
+    return None
+
+
 async def apply(
     session: AsyncSession,
     *,
@@ -89,45 +134,13 @@ async def apply(
     gift_emoji: str | None = None,
 ) -> Withdrawal:
     ensure_not_banned(user)
-    if not settings.withdraw_enabled:
-        raise WithdrawalError("Вывод временно приостановлен. Следите за новостями.")
-    if not (user.username or "").strip():
-        raise WithdrawalError(
-            "Для вывода нужен публичный @username в Telegram "
-            "(Fragment отправляет Stars по нику). Укажите username в Telegram и зайдите снова."
-        )
-    if settings.device_check_for_withdraw and not is_device_ok(user, settings):
-        raise WithdrawalError(
-            "Сначала подтвердите устройство — кнопка «🛡 Подтвердить устройство» в главном меню."
-        )
-    if withdraw_blocked_by_twink(user, settings):
-        raise WithdrawalError(
-            "Вывод недоступен: с этого устройства уже зарегистрирован другой аккаунт. "
-            "Если это ошибка — напишите в поддержку."
-        )
+    reason = await blocker(session, user=user, settings=settings)
+    if reason is not None:
+        raise WithdrawalError(reason)
     if amount < settings.withdraw_min:
         raise WithdrawalError(f"Минимум для заявки — {settings.withdraw_min} ⭐")
     if settings.withdraw_max and amount > settings.withdraw_max:
         raise WithdrawalError(f"Максимум для одной заявки — {settings.withdraw_max} ⭐")
-    if await open_withdrawal(session, user.id) is not None:
-        raise WithdrawalError("У вас уже есть открытая заявка на вывод")
-    if settings.withdraw_min_referrals > 0:
-        invites = await activated_invite_count(session, user.id)
-        if invites < settings.withdraw_min_referrals:
-            raise WithdrawalError(
-                f"Для вывода нужно {settings.withdraw_min_referrals} активных рефералов (сейчас {invites})."
-            )
-
-    if user.last_withdraw_at is not None:
-        last = user.last_withdraw_at
-        if last.tzinfo is None:
-            last = last.replace(tzinfo=UTC)
-        cooldown = timedelta(hours=settings.withdraw_cooldown_hours)
-        remaining = cooldown - (datetime.now(UTC) - last)
-        if remaining > timedelta(0):
-            hours = max(int(remaining.total_seconds() // 3600), 0)
-            minutes = int((remaining.total_seconds() % 3600) // 60)
-            raise WithdrawalError(f"Кулдаун на вывод: ещё {hours} ч {minutes} мин")
 
     if await ledger.get_balance(session, user.id) < amount:
         raise WithdrawalError("Недостаточно Stars на балансе")

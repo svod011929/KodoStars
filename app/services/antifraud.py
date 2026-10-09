@@ -1,6 +1,6 @@
-from datetime import UTC, datetime
 import time
 from collections import OrderedDict
+from datetime import UTC, datetime
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession

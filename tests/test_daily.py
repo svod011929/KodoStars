@@ -2,9 +2,11 @@ from datetime import timedelta
 
 import pytest
 
+from app.bot import texts
 from app.db.models import LedgerKind, User
-from app.services import daily, ledger, referrals
+from app.services import daily, ledger, referrals, streaks
 from app.services.errors import AlreadyClaimed, UserBanned
+from app.services.levels import info_for_xp
 
 
 async def _user(session, user_id: int = 300) -> User:
@@ -55,6 +57,39 @@ async def test_streak_continues_and_resets(session, settings) -> None:
     assert daily.next_streak(user, today) == 1
     user.last_daily_on = None
     assert daily.next_streak(user, today) == 1
+
+
+def test_current_streak_expires_after_a_missed_day() -> None:
+    today = streaks.utc_today()
+    user = User(id=1, first_name="S", streak=4, last_daily_on=today)
+    assert streaks.current_streak(user, today) == 4
+    assert streaks.broken_streak(user, today) == 0
+    user.last_daily_on = today - timedelta(days=1)
+    assert streaks.current_streak(user, today) == 4
+    assert streaks.broken_streak(user, today) == 0
+    user.last_daily_on = today - timedelta(days=2)
+    assert streaks.current_streak(user, today) == 0
+    assert streaks.broken_streak(user, today) == 4
+    user.last_daily_on = None
+    assert streaks.current_streak(user, today) == 0
+    assert streaks.broken_streak(user, today) == 0
+
+
+@pytest.mark.asyncio
+async def test_screens_show_live_streak_and_lost_one(session, settings) -> None:
+    user = await _user(session, 306)
+    user.streak = 6
+    user.last_daily_on = daily.utc_today() - timedelta(days=3)
+    user.xp = 0
+
+    preview = await daily.preview(session, user=user, settings=settings)
+    assert preview.streak_if_claimed == 1
+    assert preview.lost_streak == 6
+    assert "прервалась" in texts.daily_screen(preview, settings)
+
+    home = texts.home(user, balance=0, held=0, level=info_for_xp(0), boost_bp=100, boost_until=None, link="x")
+    assert "серия 0 дн." in home
+    assert "🔥 Серия: 0 дн." in texts.profile(user, 0, 0, info_for_xp(0), {}, 0, [], {})
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,9 @@ from app.config import Settings
 from app.services.gifts import filter_offers, gift_to_offer, invalidate_cache
 
 
-def _gift(gift_id: str, stars: int, *, emoji: str = "🎁", premium: bool = False, remaining: int | None = None) -> Gift:
+def _gift(
+    gift_id: str, stars: int, *, emoji: str = "🎁", premium: bool = False, remaining: int | None = None
+) -> Gift:
     return Gift(
         id=gift_id,
         sticker=Sticker(

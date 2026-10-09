@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,7 @@ from app.services.antifraud import bump_activity, ensure_action_cooldown, ensure
 from app.services.boosts import active_multiplier_bp
 from app.services.errors import AlreadyClaimed
 from app.services.levels import XP_DAILY, add_xp, apply_multipliers, info_for_xp
+from app.services.streaks import broken_streak, next_streak, utc_now, utc_today
 from app.services.tasks import try_complete_event
 
 
@@ -21,24 +22,7 @@ class DailyPreview:
     base_reward: int
     estimated_reward: int
     seconds_until_reset: int
-
-
-def utc_now() -> datetime:
-    return datetime.now(UTC)
-
-
-def utc_today() -> date:
-    return utc_now().date()
-
-
-def next_streak(user: User, today: date) -> int:
-    if user.last_daily_on is None:
-        return 1
-    if user.last_daily_on == today:
-        return user.streak
-    if user.last_daily_on == today - timedelta(days=1):
-        return user.streak + 1
-    return 1
+    lost_streak: int = 0
 
 
 def base_reward_for(streak: int, settings: Settings) -> int:
@@ -52,8 +36,11 @@ def seconds_until_utc_midnight(now: datetime | None = None) -> int:
     return max(int((tomorrow - now).total_seconds()), 0)
 
 
-async def preview(session: AsyncSession, *, user: User, settings: Settings) -> DailyPreview:
-    today = utc_today()
+async def preview(
+    session: AsyncSession, *, user: User, settings: Settings, now: datetime | None = None
+) -> DailyPreview:
+    now = now or utc_now()
+    today = now.date()
     claimed = user.last_daily_on == today
     streak = next_streak(user, today) if not claimed else user.streak + 1
     base = base_reward_for(streak, settings)
@@ -64,7 +51,8 @@ async def preview(session: AsyncSession, *, user: User, settings: Settings) -> D
         streak_if_claimed=streak,
         base_reward=base,
         estimated_reward=apply_multipliers(base, level_bp, boost_bp),
-        seconds_until_reset=seconds_until_utc_midnight(),
+        seconds_until_reset=seconds_until_utc_midnight(now),
+        lost_streak=broken_streak(user, today),
     )
 
 

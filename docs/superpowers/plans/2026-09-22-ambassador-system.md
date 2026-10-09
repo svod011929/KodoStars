@@ -74,26 +74,49 @@ async def test_effective_terms_defaults_to_settings(session, settings):
 @pytest.mark.asyncio
 async def test_effective_terms_takes_max_across_approved_slots(session, settings):
     session.add(User(id=10, first_name="A"))
-    session.add_all([
-        AmbassadorSlot(
-            user_id=10, kind=AmbassadorKind.CHANNEL, title="C1",
-            invite_link="https://t.me/c1", status=AmbassadorStatus.APPROVED,
-            l1_bonus=20, l1_percent=10, l2_bonus=1, l2_percent=2,
-            promo_reward=5, promo_max_uses=10,
-        ),
-        AmbassadorSlot(
-            user_id=10, kind=AmbassadorKind.CHAT, title="C2",
-            invite_link="https://t.me/c2", status=AmbassadorStatus.APPROVED,
-            l1_bonus=15, l1_percent=25, l2_bonus=5, l2_percent=1,
-            promo_reward=5, promo_max_uses=10,
-        ),
-        AmbassadorSlot(
-            user_id=10, kind=AmbassadorKind.BOT, title="B",
-            invite_link="https://t.me/b", status=AmbassadorStatus.REVOKED,
-            l1_bonus=100, l1_percent=90, l2_bonus=50, l2_percent=40,
-            promo_reward=5, promo_max_uses=10,
-        ),
-    ])
+    session.add_all(
+        [
+            AmbassadorSlot(
+                user_id=10,
+                kind=AmbassadorKind.CHANNEL,
+                title="C1",
+                invite_link="https://t.me/c1",
+                status=AmbassadorStatus.APPROVED,
+                l1_bonus=20,
+                l1_percent=10,
+                l2_bonus=1,
+                l2_percent=2,
+                promo_reward=5,
+                promo_max_uses=10,
+            ),
+            AmbassadorSlot(
+                user_id=10,
+                kind=AmbassadorKind.CHAT,
+                title="C2",
+                invite_link="https://t.me/c2",
+                status=AmbassadorStatus.APPROVED,
+                l1_bonus=15,
+                l1_percent=25,
+                l2_bonus=5,
+                l2_percent=1,
+                promo_reward=5,
+                promo_max_uses=10,
+            ),
+            AmbassadorSlot(
+                user_id=10,
+                kind=AmbassadorKind.BOT,
+                title="B",
+                invite_link="https://t.me/b",
+                status=AmbassadorStatus.REVOKED,
+                l1_bonus=100,
+                l1_percent=90,
+                l2_bonus=50,
+                l2_percent=40,
+                promo_reward=5,
+                promo_max_uses=10,
+            ),
+        ]
+    )
     await session.commit()
     terms = await amb.effective_referral_terms(session, 10, settings)
     assert (terms.l1_bonus, terms.l1_percent, terms.l2_bonus, terms.l2_percent) == (20, 25, 5, 2)
@@ -119,11 +142,13 @@ class AmbassadorKind(StrEnum):
     CHAT = "chat"
     BOT = "bot"
 
+
 class AmbassadorStatus(StrEnum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
     REVOKED = "revoked"
+
 
 AMBASSADOR_KIND_LABELS = {
     AmbassadorKind.CHANNEL.value: "Канал",
@@ -136,6 +161,7 @@ AMBASSADOR_STATUS_LABELS = {
     AmbassadorStatus.REJECTED.value: "Отклонён",
     AmbassadorStatus.REVOKED.value: "Отозван",
 }
+
 
 class AmbassadorSlot(Base):
     __tablename__ = "ambassador_slots"
@@ -157,7 +183,9 @@ class AmbassadorSlot(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 ```
 
 Add `ambassador_slot_id: Mapped[int | None]` FK on `PromoCode` (nullable).

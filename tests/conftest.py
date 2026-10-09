@@ -1,11 +1,11 @@
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, Router
 from aiogram.types import Update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -17,15 +17,24 @@ from app.db.models import Base
 from app.db.seed import seed_catalog
 from app.db.session import create_engine
 from app.op.gate import OpGate
+from app.services import gifts as gifts_service
 from app.services.access import AccessRegistry
 from app.services.app_settings import RuntimeSettingsStore
 from app.services.broadcasts import BroadcastRunner
-from app.services import gifts as gifts_service
+from tests import fake_telegram
 from tests.fake_telegram import BOT_USERNAME, FakeSession, make_bot
 
 ADMIN_ID = 1
 USER_ID = 42
 OTHER_ID = 43
+
+
+@pytest.fixture(autouse=True)
+def _telegram_accepts_every_message() -> Iterator[None]:
+    rejected = fake_telegram.rejected_html
+    rejected.clear()
+    yield
+    assert not rejected, "Telegram would reject:\n" + "\n".join(rejected)
 
 
 @pytest.fixture
@@ -71,6 +80,7 @@ class BotHarness:
     access: AccessRegistry
     store: RuntimeSettingsStore
     runner: BroadcastRunner
+    notifier: Notifier
 
     async def feed(self, update: Update) -> None:
         await self.dp.feed_update(self.bot, update)
@@ -90,6 +100,7 @@ class BotHarness:
         self.tg.member_status.clear()
         self.tg.fail_refunds = False
         self.tg.fail_send_gift = False
+        self.tg.blocked_chats.clear()
         gifts_service.invalidate_cache()
         brand.apply_bot_name("KodoStars")
 
@@ -149,7 +160,18 @@ async def harness() -> AsyncIterator[BotHarness]:
         access=access,
         store=store,
         runner=runner,
+        notifier=notifier,
     )
     await runner.shutdown()
     await bot.session.close()
     await engine.dispose()
+    _detach_routers(dp)
+
+
+def _detach_routers(router: Router) -> None:
+    """Routers are module-level singletons and refuse a second parent, so free the
+    whole tree for the next test module's dispatcher."""
+    for child in list(router.sub_routers):
+        _detach_routers(child)
+        child._parent_router = None
+    router.sub_routers.clear()

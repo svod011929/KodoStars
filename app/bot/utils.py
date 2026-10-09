@@ -44,8 +44,11 @@ def fmt_ago(value: datetime | None) -> str:
 
 def fmt_duration(seconds: int) -> str:
     seconds = max(int(seconds), 0)
-    hours, rest = divmod(seconds, 3600)
+    days, rest = divmod(seconds, 86400)
+    hours, rest = divmod(rest, 3600)
     minutes = rest // 60
+    if days:
+        return f"{days} дн {hours} ч"
     if hours:
         return f"{hours} ч {minutes:02d} мин"
     return f"{minutes} мин"

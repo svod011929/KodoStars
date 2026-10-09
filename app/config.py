@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from itertools import pairwise
 from typing import Any
 
 from pydantic import Field, field_validator, model_validator
@@ -51,6 +52,12 @@ RUNTIME_OVERRIDABLE: dict[str, type] = {
     "botohub_views_cooldown_seconds": int,
     "botohub_views_api_url": str,
     "payout_log_chat_id": int,
+    "daily_reminder_enabled": bool,
+    "daily_reminder_hour_utc": int,
+    "daily_reminder_window_days": int,
+    "contest_enabled": bool,
+    "contest_prizes": str,
+    "contest_min_referrals": int,
 }
 
 RUNTIME_SETTING_LABELS: dict[str, str] = {
@@ -93,6 +100,12 @@ RUNTIME_SETTING_LABELS: dict[str, str] = {
     "botohub_views_cooldown_seconds": "BotoHub Views: пауза между показами, с",
     "botohub_views_api_url": "BotoHub Views: URL SendPost",
     "payout_log_chat_id": "Канал выплат (chat_id, 0 = выкл)",
+    "daily_reminder_enabled": "Напоминания о ежедневке",
+    "daily_reminder_hour_utc": "Напоминания: час отправки (UTC, 0–23)",
+    "daily_reminder_window_days": "Напоминания: сколько дней после последнего захода",
+    "contest_enabled": "Конкурс недели включён",
+    "contest_prizes": "Конкурс: призы за 1, 2, 3… место, ⭐ (через запятую)",
+    "contest_min_referrals": "Конкурс: мин. активных друзей за неделю для приза",
 }
 
 # Compact admin settings hubs — every RUNTIME_OVERRIDABLE key must appear once.
@@ -114,6 +127,14 @@ SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
         "claim_cooldown_seconds",
         "currency_emoji_id",
         "currency_emoji_fallback",
+    ),
+    "engagement": (
+        "daily_reminder_enabled",
+        "daily_reminder_hour_utc",
+        "daily_reminder_window_days",
+        "contest_enabled",
+        "contest_prizes",
+        "contest_min_referrals",
     ),
     "withdraw": (
         "withdraw_enabled",
@@ -153,6 +174,7 @@ SETTINGS_GROUPS: dict[str, tuple[str, ...]] = {
 SETTINGS_GROUP_LABELS: dict[str, str] = {
     "refs": "Рефералы",
     "rewards": "Награды",
+    "engagement": "Вовлечение",
     "withdraw": "Вывод",
     "antifraud": "Антитвинк",
     "traffic": "Трафик",
@@ -162,20 +184,37 @@ SETTINGS_GROUP_LABELS: dict[str, str] = {
 SETTINGS_GROUP_ICONS: dict[str, str] = {
     "refs": "people",
     "rewards": "gift",
+    "engagement": "bell",
     "withdraw": "withdraw",
     "antifraud": "fraud",
     "traffic": "lock",
     "system": "admin",
 }
 
-_SETTING_TO_GROUP: dict[str, str] = {
-    key: group for group, keys in SETTINGS_GROUPS.items() for key in keys
-}
+_SETTING_TO_GROUP: dict[str, str] = {key: group for group, keys in SETTINGS_GROUPS.items() for key in keys}
 
 
 def setting_group(key: str) -> str | None:
     """Return settings hub id for a runtime key, if grouped."""
     return _SETTING_TO_GROUP.get(key)
+
+
+MAX_CONTEST_PLACES = 10
+# Balances are 32-bit integers on PostgreSQL; a typo must not make every payout fail.
+MAX_CONTEST_PRIZE = 1_000_000
+
+
+def parse_prizes(raw: str) -> tuple[int, ...]:
+    """``"100, 50, 25"`` → ``(100, 50, 25)``: prizes for places 1..N, never increasing."""
+    parts = [part.strip() for part in str(raw).replace(";", ",").split(",") if part.strip()]
+    if not 1 <= len(parts) <= MAX_CONTEST_PLACES:
+        raise ValueError(f"CONTEST_PRIZES: от 1 до {MAX_CONTEST_PLACES} призов через запятую")
+    if not all(part.isascii() and part.isdigit() and 0 < int(part) <= MAX_CONTEST_PRIZE for part in parts):
+        raise ValueError(f"CONTEST_PRIZES: каждый приз — целое число от 1 до {MAX_CONTEST_PRIZE}")
+    prizes = tuple(int(part) for part in parts)
+    if any(lower > higher for higher, lower in pairwise(prizes)):
+        raise ValueError("CONTEST_PRIZES: приз за место не может быть больше, чем за место выше")
+    return prizes
 
 
 class Settings(BaseSettings):
@@ -204,6 +243,17 @@ class Settings(BaseSettings):
     daily_base_reward: int = 5
     daily_streak_bonus: int = 1
     daily_streak_cap: int = 7
+    # One nudge a day for users who have not claimed yet: a live streak about to
+    # lapse, or a lapsed one. Users who last claimed more than WINDOW days ago are left alone.
+    daily_reminder_enabled: bool = True
+    daily_reminder_hour_utc: int = 17
+    daily_reminder_window_days: int = 3
+    # Weekly referral contest: whoever gets the most friends activated between Monday
+    # 00:00 and Sunday 24:00 UTC wins CONTEST_PRIZES (places 1..N) on their balance.
+    # Off by default because the prizes are paid out in Stars.
+    contest_enabled: bool = False
+    contest_prizes: str = "100,50,25"
+    contest_min_referrals: int = 3
 
     withdraw_min: int = 50
     withdraw_max: int = 0
@@ -307,12 +357,32 @@ class Settings(BaseSettings):
         "piarflow_unsub_penalty",
         "tgrass_unsub_penalty",
         "botohub_views_cooldown_seconds",
+        "contest_min_referrals",
     )
     @classmethod
     def _non_negative(cls, value: int) -> int:
         if value < 0:
             raise ValueError("value must be >= 0")
         return value
+
+    @field_validator("daily_reminder_hour_utc")
+    @classmethod
+    def _hour_range(cls, value: int) -> int:
+        if not 0 <= value <= 23:
+            raise ValueError("DAILY_REMINDER_HOUR_UTC must be within 0..23")
+        return value
+
+    @field_validator("daily_reminder_window_days")
+    @classmethod
+    def _window_range(cls, value: int) -> int:
+        if not 1 <= value <= 30:
+            raise ValueError("DAILY_REMINDER_WINDOW_DAYS must be within 1..30")
+        return value
+
+    @field_validator("contest_prizes")
+    @classmethod
+    def _contest_prizes(cls, value: str) -> str:
+        return ",".join(str(prize) for prize in parse_prizes(value))
 
     @field_validator("broadcast_rate_per_sec")
     @classmethod
@@ -383,6 +453,11 @@ class Settings(BaseSettings):
     @property
     def fragment_configured(self) -> bool:
         return bool(self.fragment_wallet_mnemonic.strip() and self.fragment_cookies.strip())
+
+    @property
+    def contest_prize_list(self) -> tuple[int, ...]:
+        # Runtime overrides are applied without validators, so parse on every read.
+        return parse_prizes(self.contest_prizes)
 
     def web_url(self, path: str = "") -> str:
         return f"{self.web_public_url.strip().rstrip('/')}/{path.lstrip('/')}"

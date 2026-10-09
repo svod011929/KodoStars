@@ -10,7 +10,7 @@ from aiogram.exceptions import TelegramAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from app.bot import emoji as pe
-from app.bot import texts
+from app.bot import keyboards, texts
 from app.bot.admin import keyboards as admin_keyboards
 from app.bot.admin import texts as admin_texts
 from app.db.models import Broadcast, User, Withdrawal
@@ -46,7 +46,9 @@ class Notifier:
 
     async def _send(self, chat_id: int, text: str, **kwargs: Any) -> None:
         try:
-            await self._bot.send_message(chat_id, pe.premiumize(text), disable_web_page_preview=True, **kwargs)
+            await self._bot.send_message(
+                chat_id, pe.premiumize(text), disable_web_page_preview=True, **kwargs
+            )
         except TelegramAPIError as exc:
             log.info("notify_send_failed", chat_id=chat_id, error=str(exc))
 
@@ -121,6 +123,21 @@ class Notifier:
                         payload["xtr_amount"], payload["revoked_stars"], payload["product_title"]
                     ),
                 )
+            case "contest_prize":
+                await self._send(
+                    payload["user_id"],
+                    texts.notify_contest_prize(payload["place"], payload["prize"], payload["score"]),
+                    reply_markup=keyboards.contest_prize_menu(),
+                )
+            case "contest_settled":
+                text = admin_texts.contest_settled(
+                    payload["week"],
+                    payload["winners"],
+                    min_referrals=payload["min_referrals"],
+                    paid_total=payload["paid_total"],
+                )
+                for admin_id in self._access.all_admin_ids():
+                    await self._send(admin_id, text)
             case "admin_alert":
                 for admin_id in self._access.all_admin_ids():
                     await self._send(admin_id, payload["text"])

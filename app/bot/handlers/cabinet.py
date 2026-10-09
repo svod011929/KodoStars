@@ -7,8 +7,8 @@ from app.bot import keyboards, texts
 from app.bot.render import render_home
 from app.bot.utils import PAGE_SIZE, button, parse_id, safe_answer, safe_edit
 from app.config import Settings
-from app.db.models import BoostProduct, User
-from app.services import leaderboard, ledger, referrals, withdrawals
+from app.db.models import BoostProduct, Contest, User
+from app.services import ambassadors, contests, leaderboard, ledger, referrals, withdrawals
 from app.services.boosts import active_boosts
 from app.services.levels import info_for_xp
 from app.services.referrals import referral_link
@@ -16,7 +16,9 @@ from app.services.referrals import referral_link
 router = Router(name="cabinet")
 
 
-async def profile_view(session: AsyncSession, user: User) -> tuple[str, InlineKeyboardMarkup]:
+async def profile_view(
+    session: AsyncSession, user: User, settings: Settings
+) -> tuple[str, InlineKeyboardMarkup]:
     balance = await ledger.get_balance(session, user.id)
     held = await withdrawals.held_total(session, user.id)
     refs = await referrals.referral_stats(session, user.id)
@@ -27,7 +29,8 @@ async def profile_view(session: AsyncSession, user: User) -> tuple[str, InlineKe
         product = await session.get(BoostProduct, boost.product_id)
         titles[boost.product_id] = product.title if product else "Буст"
     text = texts.profile(user, balance, held, info_for_xp(user.xp), refs, earned, boosts, titles)
-    return text, keyboards.profile_menu()
+    reminders = user.reminders_enabled if settings.daily_reminder_enabled else None
+    return text, keyboards.profile_menu(reminders)
 
 
 @router.callback_query(F.data == "menu:home")
@@ -49,11 +52,30 @@ async def menu_home(
 
 
 @router.callback_query(F.data == "menu:profile")
-async def menu_profile(call: CallbackQuery, session: AsyncSession, db_user: User, state: FSMContext) -> None:
+async def menu_profile(
+    call: CallbackQuery, session: AsyncSession, db_user: User, state: FSMContext, settings: Settings
+) -> None:
     await state.clear()
-    text, markup = await profile_view(session, db_user)
+    text, markup = await profile_view(session, db_user, settings)
     await safe_answer(call)
     await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data == "menu:remind:toggle")
+async def reminders_toggle(
+    call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings
+) -> None:
+    db_user.reminders_enabled = not db_user.reminders_enabled
+    text, markup = await profile_view(session, db_user, settings)
+    await safe_answer(call, "Напоминания включены" if db_user.reminders_enabled else "Напоминания выключены")
+    await safe_edit(call.message, text, markup)
+
+
+@router.callback_query(F.data == "remind:off")
+async def reminders_off(call: CallbackQuery, db_user: User) -> None:
+    db_user.reminders_enabled = False
+    await safe_answer(call, "Напоминания выключены")
+    await safe_edit(call.message, texts.reminders_off(), keyboards.back_home())
 
 
 @router.callback_query(F.data.startswith("menu:history:"))
@@ -69,42 +91,79 @@ async def menu_history(call: CallbackQuery, session: AsyncSession, db_user: User
     )
 
 
+async def referrals_view(
+    session: AsyncSession, user: User, settings: Settings, bot_username: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    link = referral_link(bot_username, user.id)
+    terms = await ambassadors.effective_referral_terms(session, user.id, settings)
+    stats = await referrals.referral_stats(session, user.id)
+    activated = await referrals.activated_invite_count(session, user.id)
+    earned = await referrals.referral_earnings(session, user.id)
+    rank = await leaderboard.user_rank_by_referrals(session, user.id)
+    recent = await referrals.list_referrals(session, user.id, level=1, limit=5)
+    contest = await contests.current(session, now=contests.utc_now(), settings=settings)
+    contest_line = ""
+    if contest is not None:
+        mine = await contests.place_of(session, contests.Week.of(contest), user.id)
+        contest_line = texts.contest_teaser(contests.top_prize(contest), mine)
+    text = texts.referrals(
+        user, link, stats, activated, earned, rank, settings, recent, terms=terms, contest_line=contest_line
+    )
+    # The friend is pitched what they would earn: the global terms, not the ambassador's.
+    share = texts.share_text(link, settings.signup_bonus, settings.referral_l1_bonus)
+    return text, keyboards.referrals_menu(link, share, contest=contest is not None)
+
+
 @router.callback_query(F.data == "menu:refs")
 async def menu_refs(
     call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings, bot_username: str
 ) -> None:
-    link = referral_link(bot_username, db_user.id)
-    stats = await referrals.referral_stats(session, db_user.id)
-    activated = await referrals.activated_invite_count(session, db_user.id)
-    earned = await referrals.referral_earnings(session, db_user.id)
-    rank = await leaderboard.user_rank_by_referrals(session, db_user.id)
-    recent = await referrals.list_referrals(session, db_user.id, level=1, limit=5)
+    text, markup = await referrals_view(session, db_user, settings, bot_username)
     await safe_answer(call)
-    await safe_edit(
-        call.message,
-        texts.referrals(db_user, link, stats, activated, earned, rank, settings, recent),
-        keyboards.referrals_menu(
-            link,
-            texts.share_text(link, settings.signup_bonus, settings.referral_l1_bonus),
-        ),
-    )
+    await safe_edit(call.message, text, markup)
+
+
+async def contest_view(session: AsyncSession, user: User, contest: Contest) -> str:
+    week = contests.Week.of(contest)
+    board = await contests.standings(session, week)
+    mine = await contests.place_of(session, week, user.id)
+    last = await contests.last_results(session, before=week)
+    return texts.contest(contest, week.seconds_left(contests.utc_now()), board, mine, last)
+
+
+async def top_view(
+    session: AsyncSession, user: User, settings: Settings, mode: str
+) -> tuple[str, InlineKeyboardMarkup]:
+    """``mode`` is a tab: ``contest`` (falls back to ``refs`` while none runs), ``refs`` or ``earn``."""
+    contest = await contests.current(session, now=contests.utc_now(), settings=settings)
+    if mode == "contest" and contest is not None:
+        text = await contest_view(session, user, contest)
+    elif mode == "earn":
+        text = texts.top(await leaderboard.top_earners(session, limit=10, days=7), mode, None)
+    else:
+        mode = "refs"
+        rows = await leaderboard.top_referrers(session, limit=10)
+        text = texts.top(rows, mode, await leaderboard.user_rank_by_referrals(session, user.id))
+    return text, keyboards.top_menu(mode, contest=contest is not None)
 
 
 @router.callback_query(F.data.startswith("menu:top:"))
-async def menu_top(call: CallbackQuery, session: AsyncSession, db_user: User) -> None:
-    mode = (call.data or "").split(":")[-1]
-    rows_refs = await leaderboard.top_referrers(session, limit=10)
-    rows_earn = await leaderboard.top_earners(session, limit=10, days=7) if mode == "earn" else []
-    my_rank = await leaderboard.user_rank_by_referrals(session, db_user.id)
+async def menu_top(call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings) -> None:
+    text, markup = await top_view(session, db_user, settings, (call.data or "").split(":")[-1])
     await safe_answer(call)
-    await safe_edit(call.message, texts.top(rows_refs, rows_earn, mode, my_rank), keyboards.top_menu(mode))
+    await safe_edit(call.message, text, markup)
 
 
 @router.callback_query(F.data == "menu:help")
-async def menu_help(call: CallbackQuery, settings: Settings, is_admin: bool) -> None:
+async def menu_help(
+    call: CallbackQuery, session: AsyncSession, db_user: User, settings: Settings, is_admin: bool
+) -> None:
+    terms = await ambassadors.effective_referral_terms(session, db_user.id, settings)
     await safe_answer(call)
     await safe_edit(
-        call.message, texts.help_text(settings, is_admin), keyboards.help_menu(settings.support_contact)
+        call.message,
+        texts.help_text(settings, is_admin, terms=terms),
+        keyboards.help_menu(settings.support_contact),
     )
 
 

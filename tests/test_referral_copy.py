@@ -2,6 +2,8 @@
 
 from app.bot import texts
 from app.config import Settings
+from app.db.models import User
+from app.services.ambassadors import terms_from_settings
 
 
 def _settings(**overrides) -> Settings:
@@ -28,8 +30,6 @@ def test_referral_activation_rules_checklist() -> None:
 
 
 def test_referral_screen_has_sections() -> None:
-    from app.db.models import User
-
     settings = _settings()
     user = User(id=1, first_name="A")
     body = texts.referrals(
@@ -41,9 +41,10 @@ def test_referral_screen_has_sections() -> None:
         rank=None,
         settings=settings,
         recent=[],
+        terms=terms_from_settings(settings),
     )
     assert "Когда друг считается активным" in body
-    assert "Что ты получаешь" in body
+    assert "Что ещё капает" in body
     assert "ещё не активирован" in body
 
 

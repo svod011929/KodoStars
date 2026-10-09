@@ -36,6 +36,9 @@ _RESULT_NAMES = {
 
 _last_ad_mono: OrderedDict[int, float] = OrderedDict()
 _MAX_AD_TRACKED = 50_000
+# The event loop only keeps weak references to tasks; without this set a
+# fire-and-forget impression can be garbage-collected mid-request.
+_background: set[asyncio.Task[None]] = set()
 
 
 def clear_ad_cooldowns() -> None:
@@ -43,11 +46,24 @@ def clear_ad_cooldowns() -> None:
     _last_ad_mono.clear()
 
 
-def _note_ad_shown(user_id: int) -> None:
-    _last_ad_mono[user_id] = time.monotonic()
+def _note_ad_shown(user_id: int) -> float:
+    mark = time.monotonic()
+    _last_ad_mono[user_id] = mark
     _last_ad_mono.move_to_end(user_id)
     while len(_last_ad_mono) > _MAX_AD_TRACKED:
         _last_ad_mono.popitem(last=False)
+    return mark
+
+
+def _restore_ad_mark(user_id: int, mark: float, previous: float | None) -> None:
+    # A slow failed request must not erase the mark of an impression that
+    # started (and maybe succeeded) after it.
+    if _last_ad_mono.get(user_id) != mark:
+        return
+    if previous is None:
+        _last_ad_mono.pop(user_id, None)
+    else:
+        _last_ad_mono[user_id] = previous
 
 
 def _cooldown_active(user_id: int, settings: Settings) -> bool:
@@ -113,9 +129,13 @@ async def maybe_send_ad(user_id: int, settings: Settings) -> bool:
     if _cooldown_active(user_id, settings):
         log.debug("botohub_views_cooldown", user_id=user_id)
         return False
+    # Claim the cooldown before the request: two earn taps in a row would
+    # otherwise both pass the check while the first impression is in flight.
+    previous = _last_ad_mono.get(user_id)
+    mark = _note_ad_shown(user_id)
     ok = await send_post(user_id, settings, hi=False)
-    if ok:
-        _note_ad_shown(user_id)
+    if not ok:
+        _restore_ad_mark(user_id, mark, previous)
     return ok
 
 
@@ -137,6 +157,7 @@ def _spawn(coro: Any, *, name: str) -> None:
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
+        coro.close()
         return
 
     async def _run() -> None:
@@ -145,4 +166,6 @@ def _spawn(coro: Any, *, name: str) -> None:
         except Exception:
             log.warning("botohub_views_task_error", task=name, exc_info=True)
 
-    loop.create_task(_run(), name=name)
+    task = loop.create_task(_run(), name=name)
+    _background.add(task)
+    task.add_done_callback(_background.discard)

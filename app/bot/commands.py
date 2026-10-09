@@ -8,6 +8,9 @@ log = structlog.get_logger("kodostars.commands")
 USER_COMMANDS = [
     BotCommand(command="start", description="Главное меню"),
     BotCommand(command="menu", description="Открыть меню"),
+    BotCommand(command="daily", description="Ежедневная награда"),
+    BotCommand(command="ref", description="Пригласить друзей"),
+    BotCommand(command="top", description="Топ и конкурс недели"),
     BotCommand(command="profile", description="Профиль и баланс"),
     BotCommand(command="help", description="Как это работает"),
     BotCommand(command="paysupport", description="Поддержка по оплате"),

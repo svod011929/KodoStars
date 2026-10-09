@@ -59,9 +59,7 @@ def gift_to_offer(gift: Gift) -> GiftOffer:
 def _is_available(gift: Gift) -> bool:
     if gift.remaining_count is not None and gift.remaining_count <= 0:
         return False
-    if gift.personal_remaining_count is not None and gift.personal_remaining_count <= 0:
-        return False
-    return True
+    return not (gift.personal_remaining_count is not None and gift.personal_remaining_count <= 0)
 
 
 async def fetch_catalog(bot: Bot, *, force: bool = False) -> list[Gift]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import timedelta
 
 from app.bot import brand
 from app.bot import emoji as pe
@@ -14,6 +15,7 @@ from app.db.models import (
     LEDGER_KIND_LABELS,
     WITHDRAWAL_STATUS_LABELS,
     AmbassadorStatus,
+    Contest,
     LedgerEntry,
     PromoCode,
     Task,
@@ -22,10 +24,13 @@ from app.db.models import (
     UserBoost,
     Withdrawal,
 )
+from app.services.ambassadors import ReferralTerms
 from app.services.channels import parse_channel_entry
+from app.services.contests import Results, Standing, Week
 from app.services.daily import DailyPreview
-from app.services.leaderboard import LeaderRow
+from app.services.leaderboard import LeaderRow, mask_name
 from app.services.levels import LevelInfo, format_multiplier, progress_bar
+from app.services.streaks import current_streak
 from app.services.tasks import task_target
 
 
@@ -67,6 +72,9 @@ def home(
     link: str,
     device_notice: str = "",
     l1_bonus: int = 0,
+    withdraw_min: int = 0,
+    withdraw_blocked: bool = False,
+    contest_prize: int = 0,
 ) -> str:
     if level.next_xp is not None:
         level_line = (
@@ -75,6 +83,16 @@ def home(
     else:
         level_line = f"🏅 Уровень {level.level} — максимальный"
     hold = f" · в холде {held} {STAR}" if held else ""
+    if withdraw_min <= 0:
+        payout_line = ""
+    elif balance < withdraw_min:
+        payout_line = (
+            f"💸 До вывода: {progress_bar(balance / withdraw_min)} {max(balance, 0)}/{withdraw_min} {STAR}\n"
+        )
+    elif withdraw_blocked:
+        payout_line = "💸 На вывод хватает — подробности в «Вывод»\n"
+    else:
+        payout_line = "💸 Вывод доступен — жми «Вывод»\n"
     boost = format_multiplier(boost_bp)
     boost_line = f"✨ Множитель {format_multiplier(level.multiplier_bp)}"
     if boost_bp > 100:
@@ -88,12 +106,18 @@ def home(
         )
     else:
         hook = ""
+    if contest_prize > 0:
+        contest_line = f"🏆 Конкурс недели: до <b>{contest_prize} {STAR}</b> за 1 место — жми «Топ»\n\n"
+    else:
+        contest_line = ""
     return (
         f"{STAR} <b>{BOT}</b>\n"
         f"{hook}"
+        f"{contest_line}"
         f"Баланс: <b>{balance} {STAR}</b>{hold}\n"
+        f"{payout_line}"
         f"{level_line}\n"
-        f"{boost_line} · серия {user.streak} дн.\n\n"
+        f"{boost_line} · серия {current_streak(user)} дн.\n\n"
         f"Твоя ссылка:\n<code>{h(link)}</code>"
         f"{notice}"
     )
@@ -104,10 +128,7 @@ def device_notice(for_withdraw: bool) -> str:
     if for_withdraw:
         bits.append("недоступен вывод")
     bits.append("не выдаются задания ОП")
-    return (
-        "🛡 <b>Подтвердите устройство</b> — одна кнопка, две секунды. "
-        f"Без этого {', '.join(bits)}."
-    )
+    return f"🛡 <b>Подтвердите устройство</b> — одна кнопка, две секунды. Без этого {', '.join(bits)}."
 
 
 def device_twink_notice() -> str:
@@ -186,7 +207,7 @@ def profile(
         lines.append(f"⏳ В холде (заявки на вывод): {held} {STAR}")
     lines += [
         f"🏅 Уровень: {lvl} · множитель {format_multiplier(level.multiplier_bp)}",
-        f"🔥 Серия: {user.streak} дн.",
+        f"🔥 Серия: {current_streak(user)} дн.",
         f"⚡ Активность: {user.activity_score}",
         f"👥 Рефералы: L1 — {refs.get(1, 0)}, L2 — {refs.get(2, 0)}",
         f"💎 Заработано с рефералов: {ref_earned} {STAR}",
@@ -276,20 +297,20 @@ def referrals(
     rank: int | None,
     settings: Settings,
     recent: Sequence[User],
+    *,
+    terms: ReferralTerms,
+    contest_line: str = "",
 ) -> str:
     lines = [
-        f"🔥 <b>{settings.referral_l1_bonus} {STAR} за друга</b>",
+        f"🔥 <b>{terms.l1_bonus} {STAR} за друга</b>",
         "Одна ссылка. Друг заходит по ней и становится активным — бонус твой.",
         "",
         "<b>Что ещё капает</b>",
-        f"• За друга (L1): <b>{settings.referral_l1_bonus} {STAR}</b> после активации + "
-        f"<b>{settings.referral_l1_percent}%</b> с его заработка.",
+        f"• За друга (L1): <b>{terms.l1_bonus} {STAR}</b> после активации + "
+        f"<b>{terms.l1_percent}%</b> с его заработка.",
     ]
     if settings.referral_levels >= 2:
-        lines.append(
-            f"• За друга друга (L2): <b>{settings.referral_l2_bonus} {STAR}</b> + "
-            f"<b>{settings.referral_l2_percent}%</b>."
-        )
+        lines.append(f"• За друга друга (L2): <b>{terms.l2_bonus} {STAR}</b> + <b>{terms.l2_percent}%</b>.")
     lines += [
         "",
         "<b>Когда друг считается активным</b>",
@@ -303,6 +324,8 @@ def referrals(
     ]
     if rank:
         lines.append(f"🏆 Место в топе рефереров: #{rank}")
+    if contest_line:
+        lines += ["", contest_line]
     lines += ["", "🔗 Твоя ссылка:", f"<code>{h(link)}</code>"]
     if recent:
         lines += ["", "Недавние рефералы:"]
@@ -331,8 +354,14 @@ def daily_screen(preview: DailyPreview, settings: Settings) -> str:
             f"≈{preview.estimated_reward} {STAR} (серия {preview.streak_if_claimed} дн.).\n\n"
             "Не пропускай день — серия сбросится."
         )
+    lost = (
+        f"💔 Серия {preview.lost_streak} дн. прервалась — копим заново.\n\n"
+        if preview.lost_streak > 1
+        else ""
+    )
     return (
         "🎁 <b>Ежедневная награда</b>\n\n"
+        f"{lost}"
         f"Сегодня: <b>≈{preview.estimated_reward} {STAR}</b> "
         f"(база {preview.base_reward}, серия станет {preview.streak_if_claimed} дн.)\n"
         f"Каждый день серии +{settings.daily_streak_bonus} {STAR}, максимум "
@@ -349,6 +378,24 @@ def daily_ok(amount: int, streak: int) -> str:
 
 def daily_wait() -> str:
     return "Сегодня уже забрано. Возвращайтесь завтра — серия вырастет."
+
+
+def daily_reminder(preview: DailyPreview, live_streak: int) -> str:
+    if live_streak > 0:
+        return (
+            f"🔥 <b>Серия {live_streak} дн. сгорит через {fmt_duration(preview.seconds_until_reset)}</b>\n\n"
+            f"Забери ежедневку: ≈{preview.estimated_reward} {STAR}, "
+            f"серия станет {preview.streak_if_claimed} дн."
+        )
+    return (
+        "🎁 <b>Ежедневная награда ждёт</b>\n\n"
+        f"Сегодня: ≈{preview.estimated_reward} {STAR}. "
+        "Забирай каждый день — с серией награда растёт."
+    )
+
+
+def reminders_off() -> str:
+    return "🔕 Напоминания о ежедневке выключены. Включить снова можно в профиле."
 
 
 def tasks_header(done: int, total: int) -> str:
@@ -400,27 +447,117 @@ def boost_card(title: str, description: str, price: int, detail: str) -> str:
     return f"🚀 <b>{h(title)}</b>\n\n{h(description)}\n\n{detail}\nЦена: <b>{price} XTR</b>"
 
 
-def top(
-    rows_refs: Sequence[LeaderRow], rows_earn: Sequence[LeaderRow], mode: str, my_rank: int | None
-) -> str:
-    medals = ["🥇", "🥈", "🥉"]
+_MEDALS = ("🥇", "🥈", "🥉")
+
+
+def _place_mark(place: int) -> str:
+    return _MEDALS[place - 1] if place <= len(_MEDALS) else f"{place}."
+
+
+def _friends(count: int) -> str:
+    return _plural_ru(count, "друг", "друга", "друзей")
+
+
+def top(rows: Sequence[LeaderRow], mode: str, my_rank: int | None) -> str:
     if mode == "earn":
         title = "🏆 <b>Топ по заработку за 7 дней</b>"
-        rows = rows_earn
         unit = STAR
     else:
-        title = "🏆 <b>Топ по рефералам</b>"
-        rows = rows_refs
+        title = "🏆 <b>Топ по рефералам</b>\n<i>Считаются только активные друзья.</i>"
         unit = "реф."
     lines = [title, ""]
     if not rows:
         lines.append("Пока пусто — стань первым!")
-    for index, row in enumerate(rows):
-        medal = medals[index] if index < 3 else f"{index + 1}."
-        lines.append(f"{medal} {h(row.name)} — <b>{row.value}</b> {unit}")
+    for place, row in enumerate(rows, start=1):
+        lines.append(f"{_place_mark(place)} {h(row.name)} — <b>{row.value}</b> {unit}")
     if mode != "earn" and my_rank:
         lines += ["", f"Твоё место: #{my_rank}"]
     return "\n".join(lines)
+
+
+def contest(
+    row: Contest,
+    seconds_left: int,
+    board: Sequence[Standing],
+    mine: Standing | None,
+    last: Results | None,
+) -> str:
+    prizes: Sequence[int] = row.prizes or ()
+    min_referrals = row.min_referrals
+    week = Week.of(row)
+    prize_line = " · ".join(f"{_place_mark(place)} {prize} {STAR}" for place, prize in enumerate(prizes, 1))
+    lines = [
+        "🏆 <b>Конкурс недели</b>",
+        "Больше всех активных друзей за неделю — забираешь приз на баланс.",
+        "",
+        f"🎁 Призы: {prize_line}",
+    ]
+    if min_referrals > 1:
+        friends = _plural_ru(min_referrals, "активного друга", "активных друзей", "активных друзей")
+        lines.append(f"🎯 Приз — от {min_referrals} {friends} за неделю")
+    lines += [f"⏳ Итоги через {fmt_duration(seconds_left)} — в понедельник, 00:00 UTC", ""]
+    if not board:
+        lines.append("Таблица пуста — первый активный друг выведет тебя в лидеры.")
+    for row in board:
+        prize = prizes[row.place - 1] if row.place <= len(prizes) and row.score >= min_referrals else 0
+        tail = f" · {prize} {STAR}" if prize else ""
+        lines.append(f"{_place_mark(row.place)} {h(mask_name(row.user))} — <b>{row.score}</b>{tail}")
+    lines += ["", _contest_me(mine, board, prizes, min_referrals)]
+    if last is not None:
+        lines += ["", _contest_results(last)]
+    if week.full:
+        scope = "Считаются друзья, активированные на этой неделе."
+    else:
+        scope = (
+            f"Конкурс стартовал {fmt_dt(week.starts_at)} UTC — считаются друзья, активированные после старта."
+        )
+    lines += ["", f"<i>{scope} Твинки и забаненные не в счёт.</i>"]
+    return "\n".join(lines)
+
+
+def _contest_me(
+    mine: Standing | None, board: Sequence[Standing], prizes: Sequence[int], min_referrals: int
+) -> str:
+    if mine is None:
+        return "Тебя пока нет в таблице — приводи друзей по своей ссылке."
+    line = f"Ты: <b>#{mine.place}</b> · {mine.score} {_friends(mine.score)}"
+    if mine.score < min_referrals:
+        return f"{line} — ещё {min_referrals - mine.score} до призового минимума"
+    if mine.place <= len(prizes):
+        return f"{line} — ты в призах, держи темп!"
+    if len(board) >= len(prizes):
+        return f"{line} — ещё {board[len(prizes) - 1].score - mine.score + 1} до призового места"
+    return line
+
+
+def _contest_results(last: Results) -> str:
+    first_day = last.contest.starts_at
+    last_day = last.contest.ends_at - timedelta(days=1)
+    title = f"<b>Итоги {first_day:%d.%m}–{last_day:%d.%m}</b>"
+    if not last.winners:
+        return f"{title}\nПризовых мест никто не занял."
+    rows = [
+        f"{_place_mark(winner.place)} {h(mask_name(user))} — {winner.score} · +{winner.prize} {STAR}"
+        for winner, user in last.winners
+    ]
+    return "\n".join([title, *rows])
+
+
+def contest_teaser(top_prize: int, mine: Standing | None) -> str:
+    head = f"🏆 Конкурс недели: до <b>{top_prize} {STAR}</b> за 1 место"
+    if mine is None:
+        return f"{head} — приведи друзей и попади в таблицу."
+    return f"{head} · ты <b>#{mine.place}</b> ({mine.score} {_friends(mine.score)})"
+
+
+def notify_contest_prize(place: int, prize: int, score: int) -> str:
+    mark = _MEDALS[place - 1] if place <= len(_MEDALS) else "🏆"
+    friends = _plural_ru(score, "активный друг", "активных друга", "активных друзей")
+    return (
+        f"{mark} <b>Конкурс недели: {place} место!</b>\n\n"
+        f"За неделю — {score} {friends}. Приз <b>+{prize} {STAR}</b> уже на балансе.\n"
+        "Новая неделя уже идёт — таблица обнулилась, можно забрать ещё."
+    )
 
 
 def withdraw_home(
@@ -432,6 +569,7 @@ def withdraw_home(
     offers_count: int = 0,
     catalog_error: bool = False,
     can_pick: bool = True,
+    blocker: str | None = None,
 ) -> str:
     lines = [
         "💸 <b>Вывод Stars</b>",
@@ -454,6 +592,8 @@ def withdraw_home(
             f"Открытая заявка #{open_request.id}: <b>{h(open_request.gift_label)}</b> — "
             f"{WITHDRAWAL_STATUS_LABELS.get(open_request.status, open_request.status)}.",
         ]
+    elif blocker:
+        lines += ["", f"⚠️ {h(blocker)}"]
     elif can_pick and catalog_error:
         lines += ["", "⚠️ Не удалось загрузить каталог подарков Telegram. Попробуйте обновить."]
     elif can_pick and balance < settings.withdraw_min:
@@ -499,10 +639,7 @@ def withdraw_status_update(wd: Withdrawal, status: str, note: str) -> str:
         return f"💸 Заявка #{wd.id}: подарок <b>{h(wd.gift_label)}</b> отправлен. Спасибо, что с нами!"
     if status == "rejected":
         reason = f"\nПричина: {h(note)}" if note else ""
-        return (
-            f"🔴 Заявка #{wd.id} на {h(wd.gift_label)} отклонена. "
-            f"Stars возвращены на баланс.{reason}"
-        )
+        return f"🔴 Заявка #{wd.id} на {h(wd.gift_label)} отклонена. Stars возвращены на баланс.{reason}"
     return f"Заявка #{wd.id}: статус — {WITHDRAWAL_STATUS_LABELS.get(status, status)}."
 
 
@@ -516,11 +653,7 @@ def promo_ok(promo: PromoCode, amount: int) -> str:
 
 def op_blocked(provider: str, extra: str = "", l1_bonus: int = 0) -> str:
     tail = f"\n\n{h(extra)}" if extra else ""
-    hook = (
-        f"Дальше откроется бот: <b>{l1_bonus} {STAR}</b> за каждого друга.\n\n"
-        if l1_bonus > 0
-        else ""
-    )
+    hook = f"Дальше откроется бот: <b>{l1_bonus} {STAR}</b> за каждого друга.\n\n" if l1_bonus > 0 else ""
     return (
         "🔒 <b>Один шаг — и доступ открыт</b>\n\n"
         f"{hook}"
@@ -538,24 +671,33 @@ def banned_short() -> str:
     return "Доступ закрыт"
 
 
-def help_text(settings: Settings, is_admin: bool) -> str:
+def help_text(settings: Settings, is_admin: bool, *, terms: ReferralTerms) -> str:
     support = f"\n\n📨 Поддержка: {h(settings.support_contact)}" if settings.support_contact else ""
     admin = "\n\n/admin — панель администратора" if is_admin else ""
     ref_rules = "\n".join(f"  {line}" for line in referral_activation_rules(settings))
+    if settings.contest_enabled:
+        prizes = " / ".join(str(prize) for prize in settings.contest_prize_list)
+        contest_line = (
+            f"• <b>Конкурс недели</b> — больше всех активных друзей за неделю: призы {prizes} {STAR} "
+            "за места, итоги в понедельник.\n"
+        )
+    else:
+        contest_line = ""
     return (
         "❓ <b>Как это работает</b>\n\n"
         f"• <b>Ежедневка</b> — каждый день забирай {settings.daily_base_reward}+ {STAR}, "
         "серия увеличивает награду.\n"
         "• <b>Задания</b> — подписки, приглашения, серии. Награда × уровень × буст.\n"
-        f"• <b>Рефералы</b> — {settings.referral_l1_bonus} {STAR} за активного друга и "
-        f"{settings.referral_l1_percent}% с его заработка (плюс 2-й уровень).\n"
+        f"• <b>Рефералы</b> — {terms.l1_bonus} {STAR} за активного друга и "
+        f"{terms.l1_percent}% с его заработка (плюс 2-й уровень).\n"
         "  Когда друг «активируется» (подробнее в меню «Рефералы»):\n"
         f"{ref_rules}\n"
+        f"{contest_line}"
         "• <b>Уровни</b> — XP за любые действия, множитель до ×2.\n"
         "• <b>Бусты</b> — множители и паки за Telegram Stars (XTR).\n"
         f"• <b>Вывод</b> — от {settings.withdraw_min} {STAR}, выбор готового подарка Telegram.\n\n"
-        "Команды: /menu — меню, /profile — профиль, /help — эта справка, "
-        "/paysupport — вопросы по оплате."
+        "Команды: /menu — меню, /daily — ежедневка, /ref — пригласить друзей, /top — топ и конкурс, "
+        "/profile — профиль, /help — эта справка, /paysupport — вопросы по оплате."
         f"{support}{admin}"
     )
 
@@ -634,7 +776,8 @@ def ambassador_hub(slots_count: int) -> str:
     return (
         f"🤝 <b>Амбассадор {BOT}</b>\n\n"
         "Подключите канал, чат или бота — после одобрения получите особые реф-условия "
-        "и ежедневные промокоды.\n"
+        "и ежедневные промокоды. Новички, которые откроют бота по ссылке вашего промокода, "
+        "станут вашими рефералами.\n"
         f"Ваших заявок: <b>{slots_count}</b>."
     )
 
@@ -656,13 +799,10 @@ def ambassador_ask_title() -> str:
 
 
 def ambassador_submitted(title: str) -> str:
-    return (
-        f"✅ Заявка «{h(title)}» отправлена.\n"
-        "Администратор проверит её и назначит условия."
-    )
+    return f"✅ Заявка «{h(title)}» отправлена.\nАдминистратор проверит её и назначит условия."
 
 
-def ambassador_slot_text(slot, today_code: str | None = None) -> str:
+def ambassador_slot_text(slot, today_code: str | None = None, today_link: str | None = None) -> str:
     kind = AMBASSADOR_KIND_LABELS.get(slot.kind, slot.kind)
     status = AMBASSADOR_STATUS_LABELS.get(slot.status, slot.status)
     lines = [
@@ -680,15 +820,28 @@ def ambassador_slot_text(slot, today_code: str | None = None) -> str:
         ]
         if today_code:
             lines += ["", f"Промокод на сегодня: <code>{h(today_code)}</code>"]
+            if today_link:
+                lines.append(f"Ссылка для активации: <code>{h(today_link)}</code>")
     elif slot.status == AmbassadorStatus.REJECTED.value and slot.reject_reason:
         lines += ["", f"Причина: {h(slot.reject_reason)}"]
     return "\n".join(lines)
 
 
-def ambassador_promo_ready(code: str, reward: int, max_uses: int, posted: bool) -> str:
+def ambassador_promo_ready(code: str, reward: int, max_uses: int, posted: bool, link: str) -> str:
     limit = "без лимита" if max_uses == 0 else f"до {max_uses} акт."
     post = "\n📣 Опубликовано в канал/чат." if posted else ""
     return (
         f"🎟 Промокод на сегодня: <code>{h(code)}</code>\n"
-        f"Награда: <b>{reward} {STAR}</b> · {limit}.{post}"
+        f"Награда: <b>{reward} {STAR}</b> · {limit}.{post}\n\n"
+        f"Ссылка для активации:\n<code>{h(link)}</code>\n"
+        "Новички, которые откроют бота по ней, станут вашими рефералами."
+    )
+
+
+def ambassador_promo_post(code: str, reward: int, max_uses: int) -> str:
+    limit = f" · до {max_uses} активаций" if max_uses else ""
+    return (
+        f"🎟 Промокод <b>{h(code)}</b>\n"
+        f"Награда: <b>{reward} {STAR}</b>{limit}\n"
+        "Жми «Активировать» — бот откроется и начислит награду."
     )

@@ -78,10 +78,7 @@ def parse_value(key: str, raw: str) -> Any:
             return match.group(1)
         if text.isdigit():
             return text
-        raise ValidationError(
-            "Пришлите numeric emoji-id или кусок "
-            '<tg-emoji emoji-id="…">…</tg-emoji>'
-        )
+        raise ValidationError('Пришлите numeric emoji-id или кусок <tg-emoji emoji-id="…">…</tg-emoji>')
     if key == "currency_emoji_fallback":
         if not text:
             raise ValidationError("Нужен unicode-символ для fallback (например ⭐)")

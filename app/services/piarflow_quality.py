@@ -123,9 +123,7 @@ async def record_paid_subs(
     return added
 
 
-async def record_from_op_result(
-    session: AsyncSession, user_id: int, result: OpResult
-) -> tuple[int, int]:
+async def record_from_op_result(session: AsyncSession, user_id: int, result: OpResult) -> tuple[int, int]:
     """Persist issued sponsors and credited links from one provider result.
 
     The final gate result (``provider="gate"``) is ignored: each adapter is
@@ -136,9 +134,7 @@ async def record_from_op_result(
     provider = result.provider
     issued_links = [s.url for s in result.sponsors if s.url]
     issued = (
-        await record_issued_sponsors(session, user_id, issued_links, provider=provider)
-        if issued_links
-        else 0
+        await record_issued_sponsors(session, user_id, issued_links, provider=provider) if issued_links else 0
     )
     paid = (
         await record_paid_subs(session, user_id, result.paid_links, provider=provider)
@@ -214,9 +210,7 @@ async def traffic_stats(session: AsyncSession, provider: str | None = None) -> P
     data.credited_today = await _count(
         session, PiarflowPaidSub, *paid_where, PiarflowPaidSub.created_at >= today
     )
-    data.credited_7d = await _count(
-        session, PiarflowPaidSub, *paid_where, PiarflowPaidSub.created_at >= d7
-    )
+    data.credited_7d = await _count(session, PiarflowPaidSub, *paid_where, PiarflowPaidSub.created_at >= d7)
     distinct_paid = select(func.count(func.distinct(PiarflowPaidSub.user_id)))
     if paid_where:
         distinct_paid = distinct_paid.where(*paid_where)
@@ -237,21 +231,14 @@ async def traffic_by_provider(session: AsyncSession) -> list[tuple[str, Piarflow
     return [(name, await traffic_stats(session, provider=name)) for name in CASCADE]
 
 
-async def list_issued(
-    session: AsyncSession, *, limit: int = 8, offset: int = 0
-) -> list[PiarflowIssuedSub]:
+async def list_issued(session: AsyncSession, *, limit: int = 8, offset: int = 0) -> list[PiarflowIssuedSub]:
     result = await session.execute(
-        select(PiarflowIssuedSub)
-        .order_by(PiarflowIssuedSub.last_shown_at.desc())
-        .offset(offset)
-        .limit(limit)
+        select(PiarflowIssuedSub).order_by(PiarflowIssuedSub.last_shown_at.desc()).offset(offset).limit(limit)
     )
     return list(result.scalars().all())
 
 
-async def list_credited(
-    session: AsyncSession, *, limit: int = 8, offset: int = 0
-) -> list[PiarflowPaidSub]:
+async def list_credited(session: AsyncSession, *, limit: int = 8, offset: int = 0) -> list[PiarflowPaidSub]:
     result = await session.execute(
         select(PiarflowPaidSub).order_by(PiarflowPaidSub.created_at.desc()).offset(offset).limit(limit)
     )

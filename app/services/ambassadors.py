@@ -8,14 +8,15 @@ from datetime import UTC, datetime, timedelta
 
 from aiogram import Bot
 from aiogram.enums import ChatMemberStatus
+from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.db.models import (
     AmbassadorKind,
-    AmbassadorStatus,
     AmbassadorSlot,
+    AmbassadorStatus,
     PromoCode,
     User,
 )
@@ -115,16 +116,12 @@ async def get_slot(session: AsyncSession, slot_id: int) -> AmbassadorSlot:
 
 async def list_user_slots(session: AsyncSession, user_id: int) -> list[AmbassadorSlot]:
     result = await session.execute(
-        select(AmbassadorSlot)
-        .where(AmbassadorSlot.user_id == user_id)
-        .order_by(AmbassadorSlot.id.desc())
+        select(AmbassadorSlot).where(AmbassadorSlot.user_id == user_id).order_by(AmbassadorSlot.id.desc())
     )
     return list(result.scalars().all())
 
 
-async def list_by_status(
-    session: AsyncSession, status: str, *, limit: int = 30
-) -> list[AmbassadorSlot]:
+async def list_by_status(session: AsyncSession, status: str, *, limit: int = 30) -> list[AmbassadorSlot]:
     result = await session.execute(
         select(AmbassadorSlot)
         .where(AmbassadorSlot.status == status)
@@ -138,9 +135,9 @@ async def count_pending(session: AsyncSession) -> int:
     return int(
         (
             await session.execute(
-                select(func.count()).select_from(AmbassadorSlot).where(
-                    AmbassadorSlot.status == AmbassadorStatus.PENDING.value
-                )
+                select(func.count())
+                .select_from(AmbassadorSlot)
+                .where(AmbassadorSlot.status == AmbassadorStatus.PENDING.value)
             )
         ).scalar_one()
     )
@@ -382,20 +379,33 @@ async def disable_auto_post(session: AsyncSession, slot_id: int) -> AmbassadorSl
     return slot
 
 
-async def publish_promo(bot: Bot, slot: AmbassadorSlot, promo: PromoCode) -> None:
+async def publish_promo(
+    bot: Bot, slot: AmbassadorSlot, *, text: str, reply_markup: InlineKeyboardMarkup
+) -> None:
     if slot.kind == AmbassadorKind.BOT.value:
         raise ValidationError("Автопост недоступен для бота")
     if not slot.chat_id:
         raise ValidationError("Не указан chat_id")
     if not await bot_is_chat_admin(bot, slot.chat_id):
         raise ValidationError("Бот не админ в канале/чате — автопост выключен")
-    text = (
-        f"🎟 Промокод <b>{promo.code}</b>\n"
-        f"Награда: <b>{promo.reward}</b> ⭐"
-        + (f" · до {promo.max_uses} активаций" if promo.max_uses else "")
-        + "\nАктивируйте в боте."
-    )
     try:
-        await bot.send_message(slot.chat_id, text)
+        await bot.send_message(slot.chat_id, text, reply_markup=reply_markup)
     except Exception as exc:
         raise EconomyError(f"Не удалось опубликовать: {exc}") from exc
+
+
+async def promo_referrer(session: AsyncSession, code: str) -> int | None:
+    """The approved ambassador whose daily promo this is.
+
+    A newcomer who opens the bot through that promo came from the ambassador's
+    audience, so they become the ambassador's referral.
+    """
+    result = await session.execute(
+        select(AmbassadorSlot.user_id)
+        .join(PromoCode, PromoCode.ambassador_slot_id == AmbassadorSlot.id)
+        .where(
+            PromoCode.code == promo_service.normalize_code(code),
+            AmbassadorSlot.status == AmbassadorStatus.APPROVED.value,
+        )
+    )
+    return result.scalar_one_or_none()
